@@ -25,6 +25,8 @@ from ldm.models.autoencoder import VQModelInterface, IdentityFirstStage, Autoenc
 from ldm.modules.diffusionmodules.util import make_beta_schedule, extract_into_tensor, noise_like
 from ldm.models.diffusion.ddim import DDIMSampler
 
+import sparse_core
+from sparse_core import Masking, CosineDecay
 
 __conditioning_keys__ = {'concat': 'c_concat',
                          'crossattn': 'c_crossattn',
@@ -71,12 +73,9 @@ class DDPM(pl.LightningModule):
                  use_positional_encodings=False,
                  learn_logvar=False,
                  logvar_init=0.,
-                 mask=False
                  ):
         super().__init__()
         assert parameterization in ["eps", "x0"], 'currently only supporting "eps" and "x0"'
-        self.mask = mask
-        if self.mask: self.automatic_optimization = False # enable munual optimization
         self.parameterization = parameterization
         print(f"{self.__class__.__name__}: Running in {self.parameterization}-prediction mode")
         self.cond_stage_model = None
@@ -115,7 +114,6 @@ class DDPM(pl.LightningModule):
         self.logvar = torch.full(fill_value=logvar_init, size=(self.num_timesteps,))
         if self.learn_logvar:
             self.logvar = nn.Parameter(self.logvar, requires_grad=True)
-
 
     def register_schedule(self, given_betas=None, beta_schedule="linear", timesteps=1000,
                           linear_start=1e-4, linear_end=2e-2, cosine_s=8e-3):
@@ -356,7 +354,7 @@ class DDPM(pl.LightningModule):
                 lr = self.optimizers().param_groups[0]['lr']
                 self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         else:
-            print('manual optimization')
+            # print('manual optimization')
             opt = self.optimizers()
             opt.zero_grad()
 
@@ -457,7 +455,17 @@ class LatentDiffusion(DDPM):
                  conditioning_key=None,
                  scale_factor=1.0,
                  scale_by_std=False,
+                 mask=False,
                  *args, **kwargs):
+        # initializing masks
+        self.mask = mask
+        if self.mask:
+            self.automatic_optimization = False  # enable munual optimization
+            mask = Masking(None, train_loader=None, prune_mode='magnitude', prune_rate_decay=None,
+                           growth_mode='random', redistribution_mode=None, **kwargs)
+            mask.add_module(self.model)
+
+
         self.num_timesteps_cond = default(num_timesteps_cond, 1)
         self.scale_by_std = scale_by_std
         assert self.num_timesteps_cond <= kwargs['timesteps']
@@ -491,40 +499,7 @@ class LatentDiffusion(DDPM):
             self.init_from_ckpt(ckpt_path, ignore_keys)
             self.restarted_from_ckpt = True
 
-    # def training_step(self, batch, batch_idx):
-    #     if self.automatic_optimization:
-    #         loss, loss_dict = self.shared_step(batch)
-    #
-    #         self.log_dict(loss_dict, prog_bar=True,
-    #                       logger=True, on_step=True, on_epoch=True)
-    #
-    #         self.log("global_step", self.global_step,
-    #                  prog_bar=True, logger=True, on_step=True, on_epoch=False)
-    #
-    #         if self.use_scheduler:
-    #             lr = self.optimizers().param_groups[0]['lr']
-    #             self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
-    #     else:
-    #         print('manual optimization')
-    #         opt = self.optimizers()
-    #         opt.zero_grad()
-    #
-    #         loss, loss_dict = self.shared_step(batch)
-    #
-    #         self.log_dict(loss_dict, prog_bar=True,
-    #                       logger=True, on_step=True, on_epoch=True)
-    #
-    #         self.log("global_step", self.global_step,
-    #                  prog_bar=True, logger=True, on_step=True, on_epoch=False)
-    #
-    #         if self.use_scheduler:
-    #             lr = self.optimizers().param_groups[0]['lr']
-    #             self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
-    #
-    #         self.manual_backward(loss)
-    #         opt.step()
-    #
-    #     return loss
+
     def make_cond_schedule(self, ):
         self.cond_ids = torch.full(size=(self.num_timesteps,), fill_value=self.num_timesteps - 1, dtype=torch.long)
         ids = torch.round(torch.linspace(0, self.num_timesteps - 1, self.num_timesteps_cond)).long()
@@ -1067,6 +1042,11 @@ class LatentDiffusion(DDPM):
         return mean_flat(kl_prior) / np.log(2.0)
 
     def p_losses(self, x_start, cond, t, noise=None):
+        # make sure that mask generated under each time step is the same
+        g = torch.Generator()
+        g.manual_seed(t)
+
+
         noise = default(noise, lambda: torch.randn_like(x_start))
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
         model_output = self.apply_model(x_noisy, t, cond)
