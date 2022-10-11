@@ -120,7 +120,7 @@ class Masking(object):
         if growth_mode not in growth_modes:
             print('Growth mode: {0} not supported!'.format(growth_mode))
             print('Supported modes are:', str(growth_modes))
-        self.args = args
+        # self.args = args
         self.device = 'cuda'
         self.growth_mode = growth_mode
         self.prune_mode = prune_mode
