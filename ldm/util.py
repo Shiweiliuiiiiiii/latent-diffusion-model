@@ -86,6 +86,8 @@ def instantiate_from_config(config):
 
 
 def get_obj_from_str(string, reload=False):
+    if not string:
+        return None
     module, cls = string.rsplit(".", 1)
     if reload:
         module_imp = importlib.import_module(module)
