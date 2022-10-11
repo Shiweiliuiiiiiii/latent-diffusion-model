@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import math
-from snip import SNIP
 from funcs import redistribution_funcs, growth_funcs, prune_funcs
 
 def add_sparse_args(parser):
@@ -200,14 +199,6 @@ class Masking(object):
                     if name not in self.masks: continue
                     self.masks[name][:] = (torch.rand(weight.shape) < density).float().data.to(self.device)
                     self.baseline_nonzero += weight.numel()*density
-
-        elif mode == 'snip':
-            print('initialize by snip')
-            self.baseline_nonzero = 0
-            layer_wise_sparsities = SNIP(self.module, density, self.train_loader, self.device, self.masks, self.args)
-
-            for sparsity_, name in zip(layer_wise_sparsities, self.masks):
-                self.masks[name][:] = (torch.rand(self.masks[name].shape) < (1 - sparsity_)).float().data.to(self.device)
 
 
         elif mode == 'resume':
