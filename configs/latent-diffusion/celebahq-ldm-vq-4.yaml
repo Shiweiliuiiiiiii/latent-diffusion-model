@@ -76,7 +76,7 @@ data:
 lightning:
   callbacks:
     image_logger:
-      target: main.ImageLogger
+      target:
       params:
         batch_frequency: 5000
         max_images: 8
