@@ -24,8 +24,8 @@ from ldm.modules.distributions.distributions import normal_kl, DiagonalGaussianD
 from ldm.models.autoencoder import VQModelInterface, IdentityFirstStage, AutoencoderKL
 from ldm.modules.diffusionmodules.util import make_beta_schedule, extract_into_tensor, noise_like
 from ldm.models.diffusion.ddim import DDIMSampler
-
-# import sparse_core
+import sys
+sys.path.append('/home/sliu/project_space/latent-diffusion/ldm/models/diffusion/')
 from sparse_core import Masking, CosineDecay
 
 __conditioning_keys__ = {'concat': 'c_concat',
