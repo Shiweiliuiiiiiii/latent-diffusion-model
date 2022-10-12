@@ -341,37 +341,17 @@ class DDPM(pl.LightningModule):
         return loss, loss_dict
 
     def training_step(self, batch, batch_idx):
-        if self.automatic_optimization:
-            loss, loss_dict = self.shared_step(batch)
+        loss, loss_dict = self.shared_step(batch)
 
-            self.log_dict(loss_dict, prog_bar=True,
-                          logger=True, on_step=True, on_epoch=True)
+        self.log_dict(loss_dict, prog_bar=True,
+                      logger=True, on_step=True, on_epoch=True)
 
-            self.log("global_step", self.global_step,
-                     prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        self.log("global_step", self.global_step,
+                 prog_bar=True, logger=True, on_step=True, on_epoch=False)
 
-            if self.use_scheduler:
-                lr = self.optimizers().param_groups[0]['lr']
-                self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
-        else:
-            # print('manual optimization')
-            opt = self.optimizers()
-            opt.zero_grad()
-
-            loss, loss_dict = self.shared_step(batch)
-
-            self.log_dict(loss_dict, prog_bar=True,
-                          logger=True, on_step=True, on_epoch=True)
-
-            self.log("global_step", self.global_step,
-                     prog_bar=True, logger=True, on_step=True, on_epoch=False)
-
-            if self.use_scheduler:
-                lr = self.optimizers().param_groups[0]['lr']
-                self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
-
-            self.manual_backward(loss)
-            opt.step()
+        if self.use_scheduler:
+            lr = self.optimizers().param_groups[0]['lr']
+            self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
 
         return loss
 
@@ -459,11 +439,6 @@ class LatentDiffusion(DDPM):
                  *args, **kwargs):
         # initializing masks
         self.mask = mask
-        if self.mask:
-            self.automatic_optimization = False  # enable munual optimization
-            mask = Masking(None, train_loader=None, prune_mode='magnitude', prune_rate_decay=None, growth_mode='random', redistribution_mode=None, **kwargs)
-            mask.add_module(self.model)
-
         self.num_timesteps_cond = default(num_timesteps_cond, 1)
         self.scale_by_std = scale_by_std
         assert self.num_timesteps_cond <= kwargs['timesteps']
@@ -497,6 +472,45 @@ class LatentDiffusion(DDPM):
             self.init_from_ckpt(ckpt_path, ignore_keys)
             self.restarted_from_ckpt = True
 
+        if self.mask:
+            self.automatic_optimization = False  # enable munual optimization
+            mask = Masking(None, train_loader=None, prune_mode='magnitude', prune_rate_decay=None, growth_mode='random', redistribution_mode=None, **kwargs)
+            mask.add_module(self.model)
+
+    def training_step(self, batch, batch_idx):
+        if self.automatic_optimization:
+            loss, loss_dict = self.shared_step(batch)
+
+            self.log_dict(loss_dict, prog_bar=True,
+                          logger=True, on_step=True, on_epoch=True)
+
+            self.log("global_step", self.global_step,
+                     prog_bar=True, logger=True, on_step=True, on_epoch=False)
+
+            if self.use_scheduler:
+                lr = self.optimizers().param_groups[0]['lr']
+                self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        else:
+            # print('manual optimization')
+            opt = self.optimizers()
+            opt.zero_grad()
+
+            loss, loss_dict = self.shared_step(batch)
+
+            self.log_dict(loss_dict, prog_bar=True,
+                          logger=True, on_step=True, on_epoch=True)
+
+            self.log("global_step", self.global_step,
+                     prog_bar=True, logger=True, on_step=True, on_epoch=False)
+
+            if self.use_scheduler:
+                lr = self.optimizers().param_groups[0]['lr']
+                self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+
+            self.manual_backward(loss)
+            opt.step()
+
+        return loss
 
     def make_cond_schedule(self, ):
         self.cond_ids = torch.full(size=(self.num_timesteps,), fill_value=self.num_timesteps - 1, dtype=torch.long)
