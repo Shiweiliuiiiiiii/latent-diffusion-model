@@ -6,28 +6,6 @@ import numpy as np
 import math
 from funcs import redistribution_funcs, growth_funcs, prune_funcs
 
-def add_sparse_args(parser):
-    # hyperparameters for Sparse Training
-    parser.add_argument('--sparse', action='store_true', help='Enable sparse mode. Default: False.')
-    parser.add_argument('--growth', type=str, default='gradient', help='Growth mode. Choose from: momentum, random, random_unfired, and momentum_neuron.')
-    parser.add_argument('--prune', type=str, default='magnitude', help='Prune mode / pruning mode. Choose from: magnitude, SET.')
-    parser.add_argument('--redistribution', type=str, default='none', help='Redistribution mode. Choose from: momentum, magnitude, nonzeros, or none.')
-    parser.add_argument('--prune-rate', type=float, default=0.50, help='The pruning rate / prune rate.')
-    parser.add_argument('--density', type=float, default=0.5, help='The density of the overall sparse network.')
-    parser.add_argument('--verbose', action='store_true', help='Prints verbose status of pruning/growth algorithms.')
-    parser.add_argument('--fix', action='store_true', help='Fix topology during training. Default: True.')
-    parser.add_argument('--sparse-init', type=str, default='ERK', help='sparse initialization')
-    parser.add_argument('--multiplier', type=float, default=1.0, metavar='N', help='extend training time by multiplier times')
-
-    # hyperparameters for GraNet
-    parser.add_argument('-u', '--update-frequency', type=int, default=2500, metavar='N', help='how many iterations to train between mask update')
-    parser.add_argument('--init-density', type=float, default=0.5, help='The initial density of sparse networks')
-    parser.add_argument('--final-density', type=float, default=0.20, help='The target density of sparse networks.')
-    parser.add_argument('-i', '--init-prune-epoch', type=int, default=0, help='The starting epoch of gradual pruning.')
-    parser.add_argument('-f', '--final-prune-epoch', type=int, default=100, help='The ending epoch of gradual pruning.')
-    parser.add_argument('--method', type=str, default='DST', help='method name: DST, GraNet, GMP')
-    parser.add_argument('--rm-first', action='store_true', help='Keep the first layer dense.')
-    parser.add_argument('--only-L', action='store_true', help='only sparsify large kernels.')
 
 class CosineDecay(object):
     """Decays a pruning rate according to a cosine schedule
@@ -178,17 +156,17 @@ class Masking(object):
 
     def init(self, mode='ERK', density=0.05, erk_power_scale=1.0):
         self.init_growth_prune_and_redist()
-        self.init_optimizer()
-        if self.args.method == 'GMP':
-            print('initialized with GMP, ones')
-            self.baseline_nonzero = 0
-            for module in self.modules:
-                for name, weight in module.named_parameters():
-                    if name not in self.masks: continue
-                    self.masks[name] = torch.ones_like(weight, dtype=torch.float32, requires_grad=False).to(self.device)
-                    self.baseline_nonzero += (self.masks[name] != 0).sum().int().item()
+        # self.init_optimizer()
+        # if self.sparse_init == 'GMP':
+        #     print('initialized with GMP, ones')
+        #     self.baseline_nonzero = 0
+        #     for module in self.modules:
+        #         for name, weight in module.named_parameters():
+        #             if name not in self.masks: continue
+        #             self.masks[name] = torch.ones_like(weight, dtype=torch.float32, requires_grad=False).to(self.device)
+        #             self.baseline_nonzero += (self.masks[name] != 0).sum().int().item()
 
-        elif mode == 'uniform':
+        if mode == 'uniform':
             print('initialized with uniform')
             # initializes each layer with a constant percentage of dense weights
             # each layer will have weight.numel()*density weights.
@@ -324,7 +302,7 @@ class Masking(object):
             self.masks.pop(name)
             print(f"pop out layer {name}")
 
-        self.apply_mask()
+        # self.apply_mask()
 
     def init_growth_prune_and_redist(self):
         if isinstance(self.growth_func, str) and self.growth_func in growth_funcs:
@@ -364,13 +342,13 @@ class Masking(object):
 
 
     def step(self, epoch):
-        self.optimizer.step()
-        self.apply_mask()
+        # self.optimizer.step()
+        # self.apply_mask()
         self.prune_rate_decay.step()
         self.prune_rate = self.prune_rate_decay.get_dr(self.prune_rate)
         self.steps += 1
 
-        if self.prune_every_k_steps is not None and epoch <= self.args.endepoch:
+        if self.prune_every_k_steps is not None:
             if self.args.method == 'GraNet':
                 if self.steps >= (self.args.init_prune_epoch * self.train_loader) and \
                         self.steps % self.prune_every_k_steps == 0:
@@ -402,111 +380,6 @@ class Masking(object):
                         self.steps % self.prune_every_k_steps == 0:
                     print('*************************************Pruning*************************************')
                     self.pruning_uniform(self.steps)
-
-    def pruning(self, step):
-        curr_prune_iter = int(step / self.prune_every_k_steps)
-        final_iter =  int((self.args.final_prune_epoch * self.args.multiplier * self.train_loader) / self.prune_every_k_steps)
-        ini_iter =  int((self.args.init_prune_epoch * self.args.multiplier * self.train_loader) / self.prune_every_k_steps)
-        total_prune_iter = final_iter - ini_iter
-        print('******************************************************')
-        print(f'Pruning Progress is {curr_prune_iter - ini_iter} / {total_prune_iter}')
-        print('******************************************************')
-
-
-        if curr_prune_iter >= ini_iter and curr_prune_iter <= final_iter - 1:
-            prune_decay = (1 - ((curr_prune_iter - ini_iter) / total_prune_iter)) ** 3
-
-            curr_prune_rate = (1 - self.args.init_density) + (self.args.init_density - self.args.final_density) * (
-                        1 - prune_decay)
-
-            weight_abs = []
-            for module in self.modules:
-                for name, weight in module.named_parameters():
-                    if name not in self.masks: continue
-                    weight_abs.append(torch.abs(weight))
-
-            # Gather all scores in a single vector and normalise
-            all_scores = torch.cat([torch.flatten(x) for x in weight_abs])
-            num_params_to_keep = int(len(all_scores) * (1 - curr_prune_rate))
-
-            threshold, _ = torch.topk(all_scores, num_params_to_keep, sorted=True)
-            acceptable_score = threshold[-1]
-
-            for module in self.modules:
-                for name, weight in module.named_parameters():
-                    if name not in self.masks: continue
-                    self.masks[name] = ((torch.abs(weight)) >= acceptable_score).float()
-
-            self.apply_mask()
-
-            total_size = 0
-            for name, weight in self.masks.items():
-                total_size += weight.numel()
-            print('Total Model parameters:', total_size)
-
-            sparse_size = 0
-            for name, weight in self.masks.items():
-                sparse_size += (weight != 0).sum().int().item()
-
-            print('Sparsity after pruning: {0}'.format(
-                (total_size-sparse_size) / total_size))
-
-    def pruning_uniform(self, step):
-        curr_prune_iter = int(step / self.prune_every_k_steps)
-        final_iter =  int((self.args.final_prune_epoch * int(len(self.train_loader))) / self.prune_every_k_steps)
-        ini_iter =  int(self.args.init_prune_epoch * (int(len(self.train_loader))) / self.prune_every_k_steps)
-        total_prune_iter = final_iter - ini_iter
-        print('******************************************************')
-        print(f'Pruning Progress is {curr_prune_iter - ini_iter} / {total_prune_iter}')
-        print('******************************************************')
-
-
-        if curr_prune_iter >= ini_iter and curr_prune_iter <= final_iter:
-            prune_decay = (1 - ((
-                                        curr_prune_iter - ini_iter) / total_prune_iter)) ** 3
-            curr_prune_rate = (1 - self.args.init_density) + (self.args.init_density - self.args.final_density) * (
-                    1 - prune_decay)
-
-            if curr_prune_rate >= 0.8:
-                curr_prune_rate = 1 - (self.total_params * (1-curr_prune_rate) - 0.2 * self.fc_params)/(self.total_params-self.fc_params)
-
-                for module in self.modules:
-                    for name, weight in module.named_parameters():
-                        if name not in self.masks: continue
-                        score = torch.flatten(torch.abs(weight))
-                        if 'classifier' in name:
-                            num_params_to_keep = int(len(score) * 0.2)
-                            threshold, _ = torch.topk(score, num_params_to_keep, sorted=True)
-                            acceptable_score = threshold[-1]
-                            self.masks[name] = ((torch.abs(weight)) >= acceptable_score).float()
-                        else:
-                            num_params_to_keep = int(len(score) * (1 - curr_prune_rate))
-                            threshold, _ = torch.topk(score, num_params_to_keep, sorted=True)
-                            acceptable_score = threshold[-1]
-                            self.masks[name] = ((torch.abs(weight)) >= acceptable_score).float()
-            else:
-                for module in self.modules:
-                    for name, weight in module.named_parameters():
-                        if name not in self.masks: continue
-                        score = torch.flatten(torch.abs(weight))
-                        num_params_to_keep = int(len(score) * (1 - curr_prune_rate))
-                        threshold, _ = torch.topk(score, num_params_to_keep, sorted=True)
-                        acceptable_score = threshold[-1]
-                        self.masks[name] = ((torch.abs(weight)) >= acceptable_score).float()
-
-            self.apply_mask()
-
-            total_size = 0
-            for name, weight in self.masks.items():
-                total_size += weight.numel()
-            print('Total Model parameters:', total_size)
-
-            sparse_size = 0
-            for name, weight in self.masks.items():
-                sparse_size += (weight != 0).sum().int().item()
-
-            print('Sparsity after pruning: {0}'.format(
-                (total_size-sparse_size) / total_size))
 
 
     def add_module(self, module):
@@ -579,8 +452,8 @@ class Masking(object):
     def apply_mask(self):
 
         # synchronism masks
-        if self.args.distributed:
-            self.synchronism_masks()
+        # if self.args.distributed:
+        #     self.synchronism_masks()
 
         for module in self.modules:
             for name, tensor in module.named_parameters():
