@@ -122,6 +122,8 @@ class Masking(object):
             print('Supported modes are:', str(growth_modes))
 
         self.device = 'cuda'
+        self.sparse_init = kwargs['sparse_init']
+        self.init_density = kwargs['init_density']
         self.growth_mode = growth_mode
         self.prune_mode = prune_mode
         self.redistribution_mode = redistribution_mode
@@ -177,7 +179,6 @@ class Masking(object):
     def init(self, mode='ERK', density=0.05, erk_power_scale=1.0):
         self.init_growth_prune_and_redist()
         self.init_optimizer()
-        self.density = density
         if self.args.method == 'GMP':
             print('initialized with GMP, ones')
             self.baseline_nonzero = 0
@@ -217,82 +218,6 @@ class Masking(object):
                     self.baseline_nonzero += weight.numel()*density
             self.steps = self.prune_rate_decay.steps
             print(f"Resuming from {self.steps} steps" )
-
-        elif mode == 'ERK_plus':
-            print('initialize by ERK_plus')
-            total_params = 0
-            self.baseline_nonzero = 0
-            for name, weight in self.masks.items():
-                total_params += weight.numel()
-                self.baseline_nonzero += weight.numel() * density
-            for name in self.masks.copy():
-                if 'head.weight' in name:
-                    total_params = total_params - self.masks[name].numel()
-                    density = (self.baseline_nonzero - self.masks[name].numel()) / total_params
-                    self.masks.pop(name)
-
-            is_epsilon_valid = False
-            dense_layers = set()
-            while not is_epsilon_valid:
-                divisor = 0
-                rhs = 0
-                raw_probabilities = {}
-
-                for name, mask in self.masks.items():
-                    n_param = np.prod(mask.shape)
-                    n_zeros = n_param * (1 - density)
-                    n_ones = n_param * density
-                    if name in dense_layers:
-                        # See `- default_sparsity * (N_3 + N_4)` part of the equation above.
-                        rhs -= n_zeros
-                    else:
-                        rhs += n_ones
-                        # Erdos-Renyi probability: epsilon * (n_in + n_out / n_in * n_out).
-                        if len(mask.shape) != 2:
-                            raw_probabilities[name] = (
-                                                              np.sum(mask.shape) / np.prod(mask.shape)
-                                                      ) ** erk_power_scale
-                        else:
-                            raw_probabilities[name] = (
-                                                              np.sum(mask.shape) / np.prod(mask.shape)
-                                                      ) ** erk_power_scale
-                        divisor += raw_probabilities[name] * n_param
-                epsilon = rhs / divisor
-                max_prob = np.max(list(raw_probabilities.values()))
-                max_prob_one = max_prob * epsilon
-                if max_prob_one > 1:
-                    is_epsilon_valid = False
-                    for mask_name, mask_raw_prob in raw_probabilities.items():
-                        if mask_raw_prob == max_prob:
-                            print(f"Sparsity of var:{mask_name} had to be set to 0.")
-                            dense_layers.add(mask_name)
-                else:
-                    is_epsilon_valid = True
-            density_dict = {}
-            total_nonzero = 0.0
-            # With the valid epsilon, we can set sparsities of the remaning layers.
-            for name, mask in self.masks.items():
-                n_param = np.prod(mask.shape)
-                if name in dense_layers:
-                    density_dict[name] = 1.0
-                else:
-                    probability_one = epsilon * raw_probabilities[name]
-                    density_dict[name] = probability_one
-                print(
-                    f"layer: {name}, shape: {mask.shape}, density: {density_dict[name]}"
-                )
-                self.masks[name][:] = (torch.rand(mask.shape) < density_dict[name]).float().data.cuda()
-                total_nonzero += density_dict[name] * mask.numel()
-
-            # for name, weight in self.module.named_parameters():
-            #     if 'head.weight' in name:
-            #         self.masks[name] = (torch.rand(weight.shape) < self.fc_density).float().data.cuda()
-            #         total_nonzero += self.fc_density * weight.numel()
-            #         total_params += weight.numel()
-            #         print(
-            #             f"layer: {name}, shape: {self.masks[name].shape}, density: {self.fc_density}"
-            #         )
-            print(f"Overall sparsity {total_nonzero / total_params}")
 
         elif mode == 'ERK':
             print('initialize by fixed_ERK')
@@ -392,7 +317,7 @@ class Masking(object):
             layer_density = sparse_weight_num / dense_weight_num
             if layer_density >= 0.99: dense_layers.append(name)
             print(f'Density of layer {name} with tensor {weight.size()} is {layer_density}')
-        print('Total parameters under sparsity level of {0}: {1}'.format(self.density, sparse_size / total_size))
+        print('Total parameters under sparsity level of {0}: {1}'.format(self.init_density, sparse_size / total_size))
 
         # masks of layers with density=1 are removed
         for name in dense_layers:
@@ -607,7 +532,7 @@ class Masking(object):
         #         if name == 'module.conv1.weight':
         #             self.masks.pop(name)
         #             print(f"pop out {name}")
-        self.init(mode=self.args.sparse_init, density=self.args.init_density)
+        self.init(mode=self.sparse_init, density=self.init_density)
 
 
     def is_at_start_of_pruning(self, name):

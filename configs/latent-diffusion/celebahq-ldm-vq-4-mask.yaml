@@ -13,7 +13,8 @@ model:
     monitor: val/loss_simple_ema
     mask: True
     fix: True
-
+    sparse_init: ERK
+    init_density: 0.3
 
     unet_config:
       target: ldm.modules.diffusionmodules.openaimodel.UNetModel
