@@ -530,13 +530,13 @@ class LatentDiffusion(DDPM):
             self.manual_backward(loss)
             opt.step()
 
-            # self.mask.apply_mask()
-            #
-            # # reload weights before update
-            # for name, tensor in self.model.named_parameters():
-            #     if name in self.mask.masks:
-            #         tensor.data = tensor + (1-self.saved_params[name])
+            self.mask.apply_mask()
 
+            # reload weights before update
+            for name, tensor in self.model.named_parameters():
+                if name in self.mask.masks:
+                    tensor.data = tensor.data + (1-self.saved_params[name])
+            self.mask.print_status()
         return loss
 
     def make_cond_schedule(self, ):
