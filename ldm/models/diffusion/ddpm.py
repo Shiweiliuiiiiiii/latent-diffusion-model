@@ -436,14 +436,14 @@ class LatentDiffusion(DDPM):
                  conditioning_key=None,
                  scale_factor=1.0,
                  scale_by_std=False,
-                 mask=False,
+                 sparse=False,
                  fix=True,
                  sparse_init='ERK',
                  init_density=0.3,
                  num_mask=10,
                  *args, **kwargs):
         # initializing masks
-        self.mask = mask
+        self.sparse = sparse
         self.num_mask = num_mask
         self.num_timesteps_cond = default(num_timesteps_cond, 1)
         self.scale_by_std = scale_by_std
@@ -478,11 +478,11 @@ class LatentDiffusion(DDPM):
             self.init_from_ckpt(ckpt_path, ignore_keys)
             self.restarted_from_ckpt = True
 
-        if self.mask:
+        if self.sparse:
             self.automatic_optimization = False  # enable munual optimization
-            mask = Masking(None, train_loader=None, prune_mode='magnitude', prune_rate_decay=None, growth_mode='random', \
+            self.mask = Masking(None, train_loader=None, prune_mode='magnitude', prune_rate_decay=None, growth_mode='random', \
                            redistribution_mode=None, fix=fix, fp16=False, sparse_init=sparse_init, init_density=init_density)
-            mask.add_module(self.model)
+            self.mask.add_module(self.model)
 
     def training_step(self, batch, batch_idx):
         if self.automatic_optimization:
