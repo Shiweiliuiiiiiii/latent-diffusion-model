@@ -491,6 +491,7 @@ class LatentDiffusion(DDPM):
             self.mask = Masking(None, train_loader=None, prune_mode='magnitude', prune_rate_decay=None, growth_mode='random', \
                            redistribution_mode=None, fix=fix, fp16=False, sparse_init=sparse_init, init_density=init_density)
             self.mask.add_module(self.model)
+            self.mask.init(mode='uniform', density=self.mask.init_density, mask_index=None)
 
     def training_step(self, batch, batch_idx):
         if self.automatic_optimization:
@@ -507,10 +508,10 @@ class LatentDiffusion(DDPM):
                 self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         else:
             # print('manual optimization')
-            self.saved_params = {}
-            for name, tensor in self.model.named_parameters():
-                if name in self.mask.masks:
-                    self.saved_params[name] = copy.deepcopy(tensor)
+            # self.saved_params = {}
+            # for name, tensor in self.model.named_parameters():
+            #     if name in self.mask.masks:
+            #         self.saved_params[name] = copy.deepcopy(tensor)
 
             opt = self.optimizers()
             opt.zero_grad()
@@ -532,11 +533,11 @@ class LatentDiffusion(DDPM):
 
             self.mask.apply_mask()
 
-            # reload weights before update
-            for name, tensor in self.model.named_parameters():
-                if name in self.mask.masks:
-                    tensor.data = tensor.data + (1-self.saved_params[name])
-            self.mask.print_status()
+            # # reload weights before update
+            # for name, tensor in self.model.named_parameters():
+            #     if name in self.mask.masks:
+            #         tensor.data = tensor.data + (1-self.saved_params[name])
+            # self.mask.print_status()
         return loss
 
     def make_cond_schedule(self, ):
