@@ -405,7 +405,7 @@ class Masking(object):
         #         if name == 'module.conv1.weight':
         #             self.masks.pop(name)
         #             print(f"pop out {name}")
-        self.init(mode=self.sparse_init, density=self.init_density)
+        # self.init(mode=self.sparse_init, density=self.init_density)
 
 
     def is_at_start_of_pruning(self, name):

@@ -15,6 +15,7 @@ model:
     fix: True
     sparse_init: ERK
     init_density: 0.3
+    num_mask: 10
 
     unet_config:
       target: ldm.modules.diffusionmodules.openaimodel.UNetModel

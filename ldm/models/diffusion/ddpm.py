@@ -439,9 +439,11 @@ class LatentDiffusion(DDPM):
                  fix=True,
                  sparse_init='ERK',
                  init_density=0.3,
+                 num_mask=10,
                  *args, **kwargs):
         # initializing masks
         self.mask = mask
+        self.num_mask = num_mask
         self.num_timesteps_cond = default(num_timesteps_cond, 1)
         self.scale_by_std = scale_by_std
         assert self.num_timesteps_cond <= kwargs['timesteps']
@@ -916,6 +918,9 @@ class LatentDiffusion(DDPM):
         return loss
 
     def forward(self, x, c, *args, **kwargs):
+
+        mask_index = torch.randint(0, self.num_timesteps//self.num_mask, (1,))
+        print(mask_index)
         t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
         if self.model.conditioning_key is not None:
             assert c is not None
@@ -1058,11 +1063,6 @@ class LatentDiffusion(DDPM):
         return mean_flat(kl_prior) / np.log(2.0)
 
     def p_losses(self, x_start, cond, t, noise=None):
-        # make sure that mask generated under each time step is the same
-        g = torch.Generator()
-        g.manual_seed(t)
-
-
         noise = default(noise, lambda: torch.randn_like(x_start))
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
         model_output = self.apply_model(x_noisy, t, cond)
