@@ -491,7 +491,7 @@ class LatentDiffusion(DDPM):
             self.mask = Masking(None, train_loader=None, prune_mode='magnitude', prune_rate_decay=None, growth_mode='random', \
                            redistribution_mode=None, fix=fix, fp16=False, sparse_init=sparse_init, init_density=init_density)
             self.mask.add_module(self.model)
-            self.mask.init(mode='uniform', density=self.mask.init_density, mask_index=None)
+            self.mask.init(mode='ERK', density=self.mask.init_density, mask_index=0)
 
     def training_step(self, batch, batch_idx):
         if self.automatic_optimization:
