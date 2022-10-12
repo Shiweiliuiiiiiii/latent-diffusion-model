@@ -436,6 +436,8 @@ class LatentDiffusion(DDPM):
                  scale_factor=1.0,
                  scale_by_std=False,
                  mask=False,
+                 fix=True,
+
                  *args, **kwargs):
         # initializing masks
         self.mask = mask
@@ -474,7 +476,7 @@ class LatentDiffusion(DDPM):
 
         if self.mask:
             self.automatic_optimization = False  # enable munual optimization
-            mask = Masking(None, train_loader=None, prune_mode='magnitude', prune_rate_decay=None, growth_mode='random', redistribution_mode=None, **kwargs)
+            mask = Masking(None, train_loader=None, prune_mode='magnitude', prune_rate_decay=None, growth_mode='random', redistribution_mode=None, fix=True, fp16=False)
             mask.add_module(self.model)
 
     def training_step(self, batch, batch_idx):
