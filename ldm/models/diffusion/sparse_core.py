@@ -120,7 +120,7 @@ class Masking(object):
         if growth_mode not in growth_modes:
             print('Growth mode: {0} not supported!'.format(growth_mode))
             print('Supported modes are:', str(growth_modes))
-        # self.args = args
+
         self.device = 'cuda'
         self.growth_mode = growth_mode
         self.prune_mode = prune_mode
@@ -590,8 +590,9 @@ class Masking(object):
         for module in self.modules:
             for name, tensor in module.named_parameters():
                 if len(tensor.size()) == 2 or len(tensor.size()) == 4:
+                    print(name)
                     self.names.append(name)
-                    self.masks[name] = torch.zeros_like(tensor, dtype=torch.float32, requires_grad=False).to(tensor.device())
+                    self.masks[name] = torch.zeros_like(tensor, dtype=torch.float32, requires_grad=False).to(self.device)
         # print('Removing biases...')
         # self.remove_weight_partial_name('bias')
         # # print('Removing fisrt layer...')
