@@ -24,6 +24,7 @@ from ldm.modules.distributions.distributions import normal_kl, DiagonalGaussianD
 from ldm.models.autoencoder import VQModelInterface, IdentityFirstStage, AutoencoderKL
 from ldm.modules.diffusionmodules.util import make_beta_schedule, extract_into_tensor, noise_like
 from ldm.models.diffusion.ddim import DDIMSampler
+import copy
 import sys
 sys.path.append('/home/sliu/project_space/latent-diffusion/ldm/models/diffusion/')
 from sparse_core import Masking, CosineDecay
@@ -919,10 +920,12 @@ class LatentDiffusion(DDPM):
 
     def forward(self, x, c, *args, **kwargs):
 
-        mask_index = torch.randint(0, self.num_mask, (1,))
-
+        mask_index = int(torch.randint(0, self.num_mask, (1,)))
         t = torch.randint(int(mask_index*(self.num_timesteps//self.num_mask)), int((mask_index+1)*(self.num_timesteps//self.num_mask)), (x.shape[0],), device=self.device).long()
-        print(t)
+        # make sure mask consistence
+
+        self.mask.init(mode=self.mask.sparse_init, density=self.mask.init_density, mask_index=mask_index)
+
         if self.model.conditioning_key is not None:
             assert c is not None
             if self.cond_stage_trainable:

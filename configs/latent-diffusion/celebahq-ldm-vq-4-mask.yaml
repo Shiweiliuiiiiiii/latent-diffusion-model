@@ -14,7 +14,7 @@ model:
     mask: True
     fix: True
     sparse_init: ERK
-    init_density: 0.3
+    init_density: 0.5
     num_mask: 10
 
     unet_config:

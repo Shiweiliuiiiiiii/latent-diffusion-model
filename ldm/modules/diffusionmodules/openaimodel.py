@@ -201,7 +201,7 @@ class ResBlock(TimestepBlock):
         self.in_layers = nn.Sequential(
             normalization(channels),
             nn.SiLU(),
-            conv_nd(dims, channels, self.out_channels, 3, padding=1),
+            conv_nd(dims, channels, self.out_channels, 3, padding=1, bias=False),
         )
 
         self.updown = up or down
@@ -219,7 +219,7 @@ class ResBlock(TimestepBlock):
             nn.SiLU(),
             linear(
                 emb_channels,
-                2 * self.out_channels if use_scale_shift_norm else self.out_channels,
+                2 * self.out_channels if use_scale_shift_norm else self.out_channels, bias=False
             ),
         )
         self.out_layers = nn.Sequential(
@@ -227,7 +227,7 @@ class ResBlock(TimestepBlock):
             nn.SiLU(),
             nn.Dropout(p=dropout),
             zero_module(
-                conv_nd(dims, self.out_channels, self.out_channels, 3, padding=1)
+                conv_nd(dims, self.out_channels, self.out_channels, 3, padding=1, bias=False)
             ),
         )
 
@@ -235,10 +235,10 @@ class ResBlock(TimestepBlock):
             self.skip_connection = nn.Identity()
         elif use_conv:
             self.skip_connection = conv_nd(
-                dims, channels, self.out_channels, 3, padding=1
+                dims, channels, self.out_channels, 3, padding=1, bias=False
             )
         else:
-            self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
+            self.skip_connection = conv_nd(dims, channels, self.out_channels, 1, bias=False)
 
     def forward(self, x, emb):
         """
@@ -516,7 +516,7 @@ class UNetModel(nn.Module):
         self.input_blocks = nn.ModuleList(
             [
                 TimestepEmbedSequential(
-                    conv_nd(dims, in_channels, model_channels, 3, padding=1)
+                    conv_nd(dims, in_channels, model_channels, 3, padding=1, bias=False)
                 )
             ]
         )

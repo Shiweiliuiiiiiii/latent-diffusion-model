@@ -154,7 +154,7 @@ class Masking(object):
                 self.name_to_32bit[name] = tensor2
             self.half = True
 
-    def init(self, mode='ERK', density=0.05, erk_power_scale=1.0):
+    def init(self, mode='ERK', density=0.05, erk_power_scale=1.0, mask_index=0):
         self.init_growth_prune_and_redist()
         # self.init_optimizer()
         # if self.sparse_init == 'GMP':
@@ -266,6 +266,7 @@ class Masking(object):
                 else:
                     is_epsilon_valid = True
 
+
             density_dict = {}
             total_nonzero = 0.0
             # With the valid epsilon, we can set sparsities of the remaning layers.
@@ -279,7 +280,9 @@ class Masking(object):
                 print(
                     f"layer: {name}, shape: {mask.shape}, density: {density_dict[name]}"
                 )
-                self.masks[name][:] = (torch.rand(mask.shape) < density_dict[name]).float().data.to(self.device)
+                generator = torch.Generator()
+                generator.manual_seed(int(mask_index))
+                self.masks[name][:] = (torch.rand(mask.shape, generator=generator) < density_dict[name]).float().data.to(self.device)
 
                 total_nonzero += density_dict[name] * mask.numel()
             print(f"Overall sparsity {total_nonzero / total_params}")
@@ -387,12 +390,12 @@ class Masking(object):
         self.module = module
         for module in self.modules:
             for name, tensor in module.named_parameters():
-                if len(tensor.size()) == 2 or len(tensor.size()) == 4:
+                if len(tensor.size()) == 2 or len(tensor.size()) == 4 or len(tensor.size()) == 1:
                     print(name)
                     self.names.append(name)
                     self.masks[name] = torch.zeros_like(tensor, dtype=torch.float32, requires_grad=False).to(self.device)
-        # print('Removing biases...')
-        # self.remove_weight_partial_name('bias')
+        print('label_emb...')
+        self.remove_weight_partial_name('label_emb')
         # # print('Removing fisrt layer...')
         # # self.remove_weight_partial_name('conv1.weight')
         # print('Removing 2D batch norms...')
