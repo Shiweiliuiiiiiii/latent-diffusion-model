@@ -209,7 +209,7 @@ class Masking(object):
             print(f"Resuming from {self.steps} steps" )
 
         elif mode == 'ERK':
-            # print('initialize by fixed_ERK')
+            print('initialize by fixed_ERK')
             total_params = 0
             self.baseline_nonzero = 0
             for name, weight in self.masks.items():
