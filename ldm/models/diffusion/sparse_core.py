@@ -5,6 +5,17 @@ import torch.optim as optim
 import numpy as np
 import math
 from funcs import redistribution_funcs, growth_funcs, prune_funcs
+import copy
+
+def get_model_params(model):
+    params = {}
+    for name in model.state_dict():
+        params[name] = copy.deepcopy(model.state_dict()[name])
+    return params
+
+
+def set_model_params(model, model_parameters):
+    model.load_state_dict(model_parameters)
 
 
 class CosineDecay(object):
@@ -261,7 +272,7 @@ class Masking(object):
                     is_epsilon_valid = False
                     for mask_name, mask_raw_prob in raw_probabilities.items():
                         if mask_raw_prob == max_prob:
-                            print(f"Sparsity of var:{mask_name} had to be set to 0.")
+                            # print(f"Sparsity of var:{mask_name} had to be set to 0.")
                             dense_layers.add(mask_name)
                 else:
                     is_epsilon_valid = True
@@ -278,7 +289,7 @@ class Masking(object):
                     probability_one = epsilon * raw_probabilities[name]
                     density_dict[name] = probability_one
                 print(
-                    f"layer: {name}, shape: {mask.shape}, density: {density_dict[name]}"
+                    # f"layer: {name}, shape: {mask.shape}, density: {density_dict[name]}"
                 )
                 generator = torch.Generator()
                 generator.manual_seed(int(mask_index))
@@ -305,7 +316,7 @@ class Masking(object):
         #     self.masks.pop(name)
         #     print(f"pop out layer {name}")
 
-        # self.apply_mask()
+        self.apply_mask()
 
     def init_growth_prune_and_redist(self):
         if isinstance(self.growth_func, str) and self.growth_func in growth_funcs:
@@ -463,8 +474,8 @@ class Masking(object):
                 if name in self.masks:
                     if not self.half:
                         tensor.data = tensor.data*self.masks[name]
-                        if 'momentum_buffer' in self.optimizer.state[tensor]:
-                            self.optimizer.state[tensor]['momentum_buffer'] = self.optimizer.state[tensor]['momentum_buffer']*self.masks[name]
+                        # if 'momentum_buffer' in self.optimizer.state[tensor]:
+                        #     self.optimizer.state[tensor]['momentum_buffer'] = self.optimizer.state[tensor]['momentum_buffer']*self.masks[name]
                     else:
                         tensor.data = tensor.data*self.masks[name].half()
                         if name in self.name_to_32bit:

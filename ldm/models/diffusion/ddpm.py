@@ -32,8 +32,16 @@ from sparse_core import Masking, CosineDecay
 __conditioning_keys__ = {'concat': 'c_concat',
                          'crossattn': 'c_crossattn',
                          'adm': 'y'}
+def get_model_params(model):
+    params = {}
+    for name, weight in model.name_parameters():
+        if name in self.mask.masks():
+            params[name] = copy.deepcopy(weight)
+    return params
 
 
+def set_model_params(model, model_parameters):
+    model.load_state_dict(model_parameters)
 def disabled_train(self, mode=True):
     """Overwrite model.train with this function to make sure train/eval mode
     does not change anymore."""
@@ -498,7 +506,11 @@ class LatentDiffusion(DDPM):
                 lr = self.optimizers().param_groups[0]['lr']
                 self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         else:
-            # print('manual optimization')
+            self.saved_params = {}
+            for name, tensor in self.model.name_parameters():
+                if name in self.mask.masks():
+                    self.saved_params[name] = copy.deepcopy(tensor)
+
             opt = self.optimizers()
             opt.zero_grad()
 
@@ -516,6 +528,15 @@ class LatentDiffusion(DDPM):
 
             self.manual_backward(loss)
             opt.step()
+
+            self.mask.apply_mask()
+
+            # reload weights before update
+            for name, tensor in self.model.name_parameters():
+                if name in self.mask.masks():
+                    tensor.data = tensor + (1-self.saved_params[name])
+
+
 
         return loss
 
@@ -919,11 +940,10 @@ class LatentDiffusion(DDPM):
         return loss
 
     def forward(self, x, c, *args, **kwargs):
-
+        # print('manual optimization')
         mask_index = int(torch.randint(0, self.num_mask, (1,)))
         t = torch.randint(int(mask_index*(self.num_timesteps//self.num_mask)), int((mask_index+1)*(self.num_timesteps//self.num_mask)), (x.shape[0],), device=self.device).long()
         # make sure mask consistence
-
         self.mask.init(mode=self.mask.sparse_init, density=self.mask.init_density, mask_index=mask_index)
 
         if self.model.conditioning_key is not None:
