@@ -801,7 +801,7 @@ class EncoderUNetModel(nn.Module):
         self.input_blocks = nn.ModuleList(
             [
                 TimestepEmbedSequential(
-                    conv_nd(dims, in_channels, model_channels, 3, padding=1)
+                    conv_nd(dims, in_channels, model_channels, 3, padding=1, bias=False)
                 )
             ]
         )
