@@ -921,7 +921,7 @@ class LatentDiffusion(DDPM):
 
         mask_index = torch.randint(0, self.num_mask, (1,))
 
-        t = torch.randint(mask_index*(self.num_timesteps//self.num_mask), (mask_index+1)*(self.num_timesteps//self.num_mask), (x.shape[0],), device=self.device).long()
+        t = torch.randint(int(mask_index*(self.num_timesteps//self.num_mask)), int((mask_index+1)*(self.num_timesteps//self.num_mask)), (x.shape[0],), device=self.device).long()
         print(t)
         if self.model.conditioning_key is not None:
             assert c is not None
