@@ -461,10 +461,8 @@ class LatentDiffusion(DDPM):
         self.mask = mask
         if self.mask:
             self.automatic_optimization = False  # enable munual optimization
-            mask = Masking(None, train_loader=None, prune_mode='magnitude', prune_rate_decay=None,
-                           growth_mode='random', redistribution_mode=None, **kwargs)
+            mask = Masking(None, train_loader=None, prune_mode='magnitude', prune_rate_decay=None, growth_mode='random', redistribution_mode=None, **kwargs)
             mask.add_module(self.model)
-
 
         self.num_timesteps_cond = default(num_timesteps_cond, 1)
         self.scale_by_std = scale_by_std

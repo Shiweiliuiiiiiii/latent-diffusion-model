@@ -12,6 +12,8 @@ model:
     channels: 3
     monitor: val/loss_simple_ema
     mask: True
+    fix: True
+
 
     unet_config:
       target: ldm.modules.diffusionmodules.openaimodel.UNetModel
