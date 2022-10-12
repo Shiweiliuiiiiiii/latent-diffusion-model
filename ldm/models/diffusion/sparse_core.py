@@ -288,9 +288,9 @@ class Masking(object):
                 else:
                     probability_one = epsilon * raw_probabilities[name]
                     density_dict[name] = probability_one
-                print(
+                # print(
                     # f"layer: {name}, shape: {mask.shape}, density: {density_dict[name]}"
-                )
+                # )
                 generator = torch.Generator()
                 generator.manual_seed(int(mask_index))
                 self.masks[name][:] = (torch.rand(mask.shape, generator=generator) < density_dict[name]).float().data.to(self.device)

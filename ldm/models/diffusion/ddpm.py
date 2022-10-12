@@ -506,9 +506,10 @@ class LatentDiffusion(DDPM):
                 lr = self.optimizers().param_groups[0]['lr']
                 self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         else:
+            print('manual optimization')
             self.saved_params = {}
             for name, tensor in self.model.named_parameters():
-                if name in self.mask.masks():
+                if name in self.mask.masks:
                     self.saved_params[name] = copy.deepcopy(tensor)
 
             opt = self.optimizers()
@@ -533,7 +534,7 @@ class LatentDiffusion(DDPM):
 
             # reload weights before update
             for name, tensor in self.model.named_parameters():
-                if name in self.mask.masks():
+                if name in self.mask.masks:
                     tensor.data = tensor + (1-self.saved_params[name])
 
 
