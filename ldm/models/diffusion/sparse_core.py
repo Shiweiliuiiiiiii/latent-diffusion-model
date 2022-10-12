@@ -160,7 +160,7 @@ class Masking(object):
         self.steps = 0
         self.start_name = None
 
-        if fix:
+        if kwargs['fix']:
             self.prune_every_k_steps = None
         else:
             self.prune_every_k_steps = kwargs['update_frequency']
