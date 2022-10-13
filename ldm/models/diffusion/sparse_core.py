@@ -296,7 +296,7 @@ class Masking(object):
                 self.masks[name][:] = (torch.rand(mask.shape, generator=generator) < density_dict[name]).float().data.to(self.device)
 
                 total_nonzero += density_dict[name] * mask.numel()
-            # print(f"Overall sparsity {total_nonzero / total_params}")
+            print(f"Overall sparsity {total_nonzero / total_params}")
 
         # total_size = 0
         # sparse_size = 0
