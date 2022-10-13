@@ -507,7 +507,7 @@ class LatentDiffusion(DDPM):
                 lr = self.optimizers().param_groups[0]['lr']
                 self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         else:
-            print('manual optimization')
+            # print('manual optimization')
             self.saved_params = {}
             for name, tensor in self.model.named_parameters():
                 if name in self.mask.masks:
@@ -536,9 +536,36 @@ class LatentDiffusion(DDPM):
             # reload weights before update
             for name, tensor in self.model.named_parameters():
                 if name in self.mask.masks:
-                    tensor.data = tensor.data + (1-self.mask.masks[name]) * self.saved_params[name]
+                    tensor.data.copy_(tensor.data + (1-self.mask.masks[name]) * self.saved_params[name].data)
+
             # self.mask.print_status()
         return loss
+
+    @torch.no_grad()
+    def validation_step(self, batch, batch_idx):
+
+        self.saved_params = {}
+        for name, tensor in self.model.named_parameters():
+            if name in self.mask.masks:
+                self.saved_params[name] = copy.deepcopy(tensor)
+
+        _, loss_dict_no_ema = self.shared_step(batch)
+
+        # reload weights back to self.model
+        for name, tensor in self.model.named_parameters():
+            if name in self.mask.masks:
+                tensor.data.copy_(self.saved_params[name].data)
+
+        with self.ema_scope():
+            _, loss_dict_ema = self.shared_step(batch)
+            loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
+        self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
+        self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
+
+        # reload weights back to self.model
+        for name, tensor in self.model.named_parameters():
+            if name in self.mask.masks:
+                tensor.data.copy_(self.saved_params[name].data)
 
     def make_cond_schedule(self, ):
         self.cond_ids = torch.full(size=(self.num_timesteps,), fill_value=self.num_timesteps - 1, dtype=torch.long)
