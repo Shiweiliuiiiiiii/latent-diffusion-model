@@ -480,7 +480,7 @@ class Masking(object):
 
         # synchronism masks
         # if self.args.distributed:
-        #     self.synchronism_masks()
+        self.synchronism_masks()
 
         for module in self.modules:
             for name, tensor in module.named_parameters():

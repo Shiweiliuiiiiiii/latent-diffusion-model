@@ -526,7 +526,6 @@ if __name__ == "__main__":
             cpu = True
         else:
             gpuinfo = trainer_config["gpus"]
-            print(gpuinfo)
             print(f"Running on GPUs {gpuinfo}")
             cpu = False
         trainer_opt = argparse.Namespace(**trainer_config)
