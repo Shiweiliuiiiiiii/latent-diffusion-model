@@ -297,7 +297,7 @@ class Masking(object):
             generator.manual_seed(int(mask_index))
             # With the valid epsilon, we can set sparsities of the remaning layers.
             for name, mask in self.masks.items():
-                self.masks[name][:] = (torch.rand(mask.shape, generator=generator, device='cuda') < self.layer_wise_sparsity[name].data.to('cuda'))
+                self.masks[name][:] = (torch.rand(mask.shape, generator=generator, device='cuda') < torch.from_numpy(self.layer_wise_sparsity[name]).float().to('cuda'))
                 # self.masks[name][:] = torch.cuda.FloatTensor(mask.shape).normal_(generator=generator)
 
                 total_nonzero += self.layer_wise_sparsity[name] * mask.numel()
