@@ -543,29 +543,36 @@ class LatentDiffusion(DDPM):
 
     @torch.no_grad()
     def validation_step(self, batch, batch_idx):
+        if self.automatic_optimization:
+            _, loss_dict_no_ema = self.shared_step(batch)
+            with self.ema_scope():
+                _, loss_dict_ema = self.shared_step(batch)
+                loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
+            self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
+            self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
+        else:
+            self.saved_params = {}
+            for name, tensor in self.model.named_parameters():
+                if name in self.mask.masks:
+                    self.saved_params[name] = copy.deepcopy(tensor)
 
-        self.saved_params = {}
-        for name, tensor in self.model.named_parameters():
-            if name in self.mask.masks:
-                self.saved_params[name] = copy.deepcopy(tensor)
+            _, loss_dict_no_ema = self.shared_step(batch)
 
-        _, loss_dict_no_ema = self.shared_step(batch)
+            # reload weights back to self.model
+            for name, tensor in self.model.named_parameters():
+                if name in self.mask.masks:
+                    tensor.data.copy_(self.saved_params[name].data)
 
-        # reload weights back to self.model
-        for name, tensor in self.model.named_parameters():
-            if name in self.mask.masks:
-                tensor.data.copy_(self.saved_params[name].data)
+            with self.ema_scope():
+                _, loss_dict_ema = self.shared_step(batch)
+                loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
+            self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
+            self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
 
-        with self.ema_scope():
-            _, loss_dict_ema = self.shared_step(batch)
-            loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
-        self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
-        self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
-
-        # reload weights back to self.model
-        for name, tensor in self.model.named_parameters():
-            if name in self.mask.masks:
-                tensor.data.copy_(self.saved_params[name].data)
+            # reload weights back to self.model
+            for name, tensor in self.model.named_parameters():
+                if name in self.mask.masks:
+                    tensor.data.copy_(self.saved_params[name].data)
 
     def make_cond_schedule(self, ):
         self.cond_ids = torch.full(size=(self.num_timesteps,), fill_value=self.num_timesteps - 1, dtype=torch.long)
