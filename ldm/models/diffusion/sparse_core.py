@@ -303,6 +303,10 @@ class Masking(object):
                 total_weight += mask.numel()
             print(f"Overall sparsity {total_nonzero / total_weight}")
 
+            # synchronism masks
+            # if self.args.distributed:
+            self.synchronism_masks()
+
         # total_size = 0
         # sparse_size = 0
         # dense_layers = []
@@ -483,10 +487,6 @@ class Masking(object):
         print('Final sparsity level is {0}'.format(1 - sparse_size / total_size))
 
     def apply_mask(self):
-
-        # synchronism masks
-        # if self.args.distributed:
-        self.synchronism_masks()
 
         for module in self.modules:
             for name, tensor in module.named_parameters():
