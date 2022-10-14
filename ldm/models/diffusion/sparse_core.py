@@ -486,7 +486,7 @@ class Masking(object):
             for name, tensor in module.named_parameters():
                 if name in self.masks:
                     if not self.half:
-                        tensor.data.copy_(tensor.data*self.masks[name])
+                        tensor.data.copy_(tensor.data*self.masks[name].to(tensor.device))
                         # if 'momentum_buffer' in self.optimizer.state[tensor]:
                         #     self.optimizer.state[tensor]['momentum_buffer'] = self.optimizer.state[tensor]['momentum_buffer']*self.masks[name]
                     else:
