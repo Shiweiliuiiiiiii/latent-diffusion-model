@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import math
-from funcs import redistribution_funcs, growth_funcs, prune_funcs
+from .funcs import redistribution_funcs, growth_funcs, prune_funcs
 import copy
 
 def get_model_params(model):
@@ -290,7 +290,7 @@ class Masking(object):
                     # print(
                     #     f"layer: {name}, shape: {mask.shape}, density: {density_dict[name]}"
                     # )
-                    
+
             total_nonzero = 0.0
             generator = torch.Generator()
             generator.manual_seed(int(mask_index))
