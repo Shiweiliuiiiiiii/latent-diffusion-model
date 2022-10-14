@@ -304,7 +304,7 @@ class Masking(object):
 
             # synchronism masks
             # if self.args.distributed:
-            self.synchronism_masks()
+            # self.synchronism_masks()
 
         # total_size = 0
         # sparse_size = 0
@@ -593,5 +593,5 @@ class Masking(object):
     def synchronism_masks(self):
 
         for name in self.masks.keys():
-            torch.distributed.broadcast(self.masks[name], async_op=False)
+            torch.distributed.broadcast(self.masks[name], src=0, async_op=False)
 
