@@ -293,7 +293,7 @@ class Masking(object):
 
             total_nonzero = 0.0
             total_weight = 0.0
-            generator = torch.Generator(device='cuda')
+            generator = torch.Generator(device='cpu')
             generator.manual_seed(int(mask_index))
             # With the valid epsilon, we can set sparsities of the remaning layers.
             for name, mask in self.masks.items():
