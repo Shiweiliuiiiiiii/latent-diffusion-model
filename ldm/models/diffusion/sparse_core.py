@@ -150,7 +150,6 @@ class Masking(object):
         self.prune_rate = prune_rate
         self.name2prune_rate = {}
         self.steps = 0
-        self.total_params = 0
         self.start_name = None
 
         if kwargs['fix']:
@@ -293,13 +292,15 @@ class Masking(object):
                     # )
 
             total_nonzero = 0.0
+            total_weight = 0.0
             generator = torch.Generator()
             generator.manual_seed(int(mask_index))
             # With the valid epsilon, we can set sparsities of the remaning layers.
             for name, mask in self.masks.items():
                 self.masks[name][:] = (torch.rand(mask.shape, generator=generator) < self.layer_wise_sparsity[name]).float().data
                 total_nonzero += self.layer_wise_sparsity[name] * mask.numel()
-            print(f"Overall sparsity {total_nonzero / self.total_params}")
+                total_weight += mask.numel()
+            print(f"Overall sparsity {total_nonzero / total_weight}")
 
         # total_size = 0
         # sparse_size = 0
@@ -402,6 +403,7 @@ class Masking(object):
     def add_module(self, module):
         self.modules.append(module)
         self.module = module
+
         for module in self.modules:
             for name, tensor in module.named_parameters():
                 if len(tensor.size()) == 2 or len(tensor.size()) == 4:
