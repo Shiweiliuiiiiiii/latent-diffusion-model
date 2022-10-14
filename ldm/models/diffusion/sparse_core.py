@@ -298,9 +298,6 @@ class Masking(object):
             # With the valid epsilon, we can set sparsities of the remaning layers.
             for name, mask in self.masks.items():
                 self.masks[name][:] = (torch.rand(mask.shape, generator=generator, device='cuda') < self.layer_wise_sparsity[name])
-                # self.masks[name][:] = (torch.rand(mask.shape, generator=generator, device='cuda') < torch.FloatTensor(self.layer_wise_sparsity[name]).to('cuda'))
-                # self.masks[name][:] = torch.cuda.FloatTensor(mask.shape).normal_(generator=generator)
-
                 total_nonzero += self.layer_wise_sparsity[name] * mask.numel()
                 total_weight += mask.numel()
             print(f"Overall sparsity {total_nonzero / total_weight}")
@@ -596,5 +593,5 @@ class Masking(object):
     def synchronism_masks(self):
 
         for name in self.masks.keys():
-            torch.distributed.broadcast(self.masks[name], src=0, async_op=False)
+            torch.distributed.broadcast(self.masks[name], async_op=False)
 
