@@ -7,6 +7,7 @@ python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask.yaml -t --
 
 
 nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask.yaml -t --gpus 0,1  > M10_S05.txt 2>&1 &
+nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask-M20-0.5.yaml -t --gpus 6,7  > M20_S05.txt 2>&1 &
 nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4.yaml -t --gpus 2,3  > new_dense.txt 2>&1 &
 # nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask-0.8.yaml -t --gpus 4,5  > M10_S08.txt 2>&1 &
 
