@@ -6,19 +6,24 @@ python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask.yaml -t --
 #CUDA_VISIBLE_DEVICES=<GPU_ID> python main.py --base configs/autoencoder/<config_spec>.yaml -t --gpus 0,
 
 
-nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask.yaml -t --gpus 0,1  > M10_S05.txt 2>&1 &
-nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4.yaml -t --gpus 2,3  > new_dense.txt 2>&1 &
-nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask-0.8.yaml -t --gpus 4,5  > M10_S08.txt 2>&1 &
-nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask-M20-0.5.yaml -t --gpus 6,7  > M20_S05.txt 2>&1 &
-
-nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mas-M5-0.5.yaml -t --gpus 0,1,6,7  > M5_S05.txt 2>&1 &
+nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask.yaml -t --resume  \
+logs/2022-10-14T21-38-08_celebahq-ldm-vq-4-mask/ --gpus 0,1  > M10_S05.txt 2>&1 &
 
 
+nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4.yaml -t --resume logs/2022-10-14T21-38-13_celebahq-ldm-vq-4 --gpus 2,3  > new_dense.txt 2>&1 &
 
 
-for a in *.jpg; do
-  b=$(printf %05d.jpg ${a%.jpg})
-  if [ $a != $b ]; then
-    mv $a $b
-  fi
-done
+nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask-0.8.yaml -t --resume logs/2022-10-14T21-38-17_celebahq-ldm-vq-4-mask-0.8 --gpus 4,5  > M10_S08.txt 2>&1 &
+
+
+nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask-M20-0.5.yaml -t --resume logs/2022-10-14T21-38-22_celebahq-ldm-vq-4-mask-M20-0.5 --gpus 6,7  > M20_S05.txt 2>&1 &
+
+
+nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mas-M5-0.5.yaml -t --resume  --gpus 2,3  > M5_S05.txt 2>&1 &
+
+
+
+sample
+
+nohup CUDA_VISIBLE_DEVICES=3 python scripts/sample_diffusion.py -r /home/shiwei/Projects/latent-diffusion-model/logs/2022-10-14T21-38-13_celebahq-ldm-vq-4/checkpoints/last.ckpt   \
+-l ./results/celebahq-ldm-vq-4 -n 10000 --batch_size 48 -c 200 -e 0.0   > sample_new_dense.txt 2>&1 &
