@@ -306,18 +306,18 @@ class Masking(object):
             # if self.args.distributed:
             # self.synchronism_masks()
 
-        # total_size = 0
-        # sparse_size = 0
+        total_size = 0
+        sparse_size = 0
         # dense_layers = []
-        # for name, weight in self.masks.items():
-        #     dense_weight_num = weight.numel()
-        #     sparse_weight_num = (weight != 0).sum().int().item()
-        #     total_size += dense_weight_num
-        #     sparse_size += sparse_weight_num
-        #     layer_density = sparse_weight_num / dense_weight_num
-        #     if layer_density >= 0.99: dense_layers.append(name)
-        #     print(f'Density of layer {name} with tensor {weight.size()} is {layer_density}')
-        # print('Total parameters under sparsity level of {0}: {1}'.format(self.init_density, sparse_size / total_size))
+        for name, weight in self.masks.items():
+            dense_weight_num = weight.numel()
+            sparse_weight_num = (weight != 0).sum().int().item()
+            total_size += dense_weight_num
+            sparse_size += sparse_weight_num
+            layer_density = sparse_weight_num / dense_weight_num
+            # if layer_density >= 0.99: dense_layers.append(name)
+            print(f'Density of layer {name} with tensor {weight.size()} is {layer_density}')
+        print('Total parameters under sparsity level of {0}: {1}'.format(self.init_density, sparse_size / total_size))
         #
         # # masks of layers with density=1 are removed
         # for name in dense_layers:

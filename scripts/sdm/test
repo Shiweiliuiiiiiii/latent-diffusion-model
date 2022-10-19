@@ -17,6 +17,9 @@ nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4.yaml -t -
 nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mas-M5-0.5.yaml -t --resume  --gpus 6,7  > M5_S05.txt 2>&1 &
 
 
+## optimal M
+
+python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-dense-M100.yaml -t --gpus 0,1  > Dense_M100.txt 2>&1 &
 
 
 sample
