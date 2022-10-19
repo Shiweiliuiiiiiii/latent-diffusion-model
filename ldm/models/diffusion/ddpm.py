@@ -976,7 +976,7 @@ class LatentDiffusion(DDPM):
     def forward(self, x, c, *args, **kwargs):
         print(x)
         # print('manual optimization')
-        mask_index = int(torch.randint(0, self.num_mask, (1,)))  # mask index and t are the same for each gpu
+        mask_index = int(torch.randint(0, self.num_mask, (1,)))  # mask index and t are the same for each gpu, but x is sampled differently for each gpu
         t = torch.randint(int(mask_index*(self.num_timesteps//self.num_mask)), int((mask_index+1)*(self.num_timesteps//self.num_mask)), (x.shape[0],), device=self.device).long()
 
         # ensure mask consistence
