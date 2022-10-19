@@ -445,6 +445,7 @@ class LatentDiffusion(DDPM):
                  scale_factor=1.0,
                  scale_by_std=False,
                  sparse=False,
+                 no_mask=False,
                  fix=True,
                  sparse_init='ERK',
                  init_density=0.3,
@@ -452,6 +453,7 @@ class LatentDiffusion(DDPM):
                  *args, **kwargs):
         # initializing masks
         self.sparse = sparse
+        self.no_mask = no_mask
         self.num_mask = num_mask
         self.num_timesteps_cond = default(num_timesteps_cond, 1)
         self.scale_by_std = scale_by_std
@@ -506,12 +508,14 @@ class LatentDiffusion(DDPM):
             if self.use_scheduler:
                 lr = self.optimizers().param_groups[0]['lr']
                 self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+
         else:
             # print('manual optimization')
-            self.saved_params = {}
-            for name, tensor in self.model.named_parameters():
-                if name in self.mask.masks:
-                    self.saved_params[name] = copy.deepcopy(tensor)
+            if self.sparse and (not self.no_mask):
+                self.saved_params = {}
+                for name, tensor in self.model.named_parameters():
+                    if name in self.mask.masks:
+                        self.saved_params[name] = copy.deepcopy(tensor)
 
             opt = self.optimizers()
             opt.zero_grad()
@@ -531,14 +535,14 @@ class LatentDiffusion(DDPM):
             self.manual_backward(loss)
             opt.step()
 
-            self.mask.apply_mask()
+            if self.sparse and (not self.no_mask):
+                self.mask.apply_mask()
 
-            # reload weights before update
-            for name, tensor in self.model.named_parameters():
-                if name in self.mask.masks:
-                    tensor.data.copy_(tensor.data + (1-self.mask.masks[name]).to(tensor.device) * self.saved_params[name].data)
+                # reload weights before update
+                for name, tensor in self.model.named_parameters():
+                    if name in self.mask.masks:
+                        tensor.data.copy_(tensor.data + (1-self.mask.masks[name]).to(tensor.device) * self.saved_params[name].data)
 
-            # self.mask.print_status()
         return loss
 
     @torch.no_grad()
@@ -980,7 +984,7 @@ class LatentDiffusion(DDPM):
         t = torch.randint(int(mask_index*(self.num_timesteps//self.num_mask)), int((mask_index+1)*(self.num_timesteps//self.num_mask)), (x.shape[0],), device=self.device).long()
 
         # ensure mask consistence
-        if self.sparse:
+        if self.sparse and (not self.no_mask):
             self.mask.init(mode=self.mask.sparse_init, density=self.mask.init_density, mask_index=mask_index)
 
         if self.model.conditioning_key is not None:
