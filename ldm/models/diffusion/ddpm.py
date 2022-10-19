@@ -976,8 +976,8 @@ class LatentDiffusion(DDPM):
     def forward(self, x, c, *args, **kwargs):
         # print('manual optimization')
         mask_index = int(torch.randint(0, self.num_mask, (1,)))
-        print(mask_index)
         t = torch.randint(int(mask_index*(self.num_timesteps//self.num_mask)), int((mask_index+1)*(self.num_timesteps//self.num_mask)), (x.shape[0],), device=self.device).long()
+        print(t)
         # ensure mask consistence
         if self.sparse:
             self.mask.init(mode=self.mask.sparse_init, density=self.mask.init_density, mask_index=mask_index)
