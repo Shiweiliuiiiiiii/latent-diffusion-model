@@ -6,7 +6,7 @@ python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask.yaml -t --
 #CUDA_VISIBLE_DEVICES=<GPU_ID> python main.py --base configs/autoencoder/<config_spec>.yaml -t --gpus 0,
 
 
-nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask.yaml -t --resume logs/2022-10-14T21-38-08_celebahq-ldm-vq-4-mask/checkpoints/epoch=000204.ckpt --gpus 0,1  > M10_S05.txt 2>&1 &
+nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask.yaml -t --gpus 2 > M10_S05.txt 2>&1 &
 
 nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask-0.8.yaml -t --resume logs/2022-10-14T21-38-17_celebahq-ldm-vq-4-mask-0.8/checkpoints/last.ckpt --gpus 2,3  > M10_S08.txt 2>&1 &
 
