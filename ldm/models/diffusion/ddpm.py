@@ -445,7 +445,7 @@ class LatentDiffusion(DDPM):
                  scale_factor=1.0,
                  scale_by_std=False,
                  sparse=False,
-                 no_mask=False,
+                 group=False,
                  fix=True,
                  sparse_init='ERK',
                  init_density=0.3,
@@ -453,7 +453,7 @@ class LatentDiffusion(DDPM):
                  *args, **kwargs):
         # initializing masks
         self.sparse = sparse
-        self.no_mask = no_mask
+        self.group = group
         self.num_mask = num_mask
         self.num_timesteps_cond = default(num_timesteps_cond, 1)
         self.scale_by_std = scale_by_std
@@ -511,7 +511,7 @@ class LatentDiffusion(DDPM):
 
         else:
             # print('manual optimization')
-            if self.sparse and (not self.no_mask):
+            if self.sparse:
                 self.saved_params = {}
                 for name, tensor in self.model.named_parameters():
                     if name in self.mask.masks:
@@ -535,7 +535,7 @@ class LatentDiffusion(DDPM):
             self.manual_backward(loss)
             opt.step()
 
-            if self.sparse and (not self.no_mask):
+            if self.sparse:
                 self.mask.apply_mask()
 
                 # reload weights before update
@@ -978,14 +978,19 @@ class LatentDiffusion(DDPM):
         return loss
 
     def forward(self, x, c, *args, **kwargs):
-        print(x)
+        # print(x)
         # print('manual optimization')
-        mask_index = int(torch.randint(0, self.num_mask, (1,)))  # mask index and t are the same for each gpu, but x is sampled differently for each gpu
-        t = torch.randint(int(mask_index*(self.num_timesteps//self.num_mask)), int((mask_index+1)*(self.num_timesteps//self.num_mask)), (x.shape[0],), device=self.device).long()
+        if not self.sparse: # normal update, no mask, no group
+            t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
 
-        # ensure mask consistence
-        if self.sparse and (not self.no_mask):
-            self.mask.init(mode=self.mask.sparse_init, density=self.mask.init_density, mask_index=mask_index)
+        else:
+            if self.group: # with mask and  group
+                mask_index = int(torch.randint(0, self.num_mask, (1,)))  # mask index and t are the same for each gpu, but x is sampled differently for each gpu
+                t = torch.randint(int(mask_index*(self.num_timesteps//self.num_mask)), int((mask_index+1)*(self.num_timesteps//self.num_mask)), (x.shape[0],), device=self.device).long()
+                self.mask.init(mode=self.mask.sparse_init, density=self.mask.init_density, mask_index=mask_index)
+            else: # with mask, but no group
+                t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
+                self.mask.init(mode=self.mask.sparse_init, density=self.mask.init_density, mask_index=t)
 
         if self.model.conditioning_key is not None:
             assert c is not None

@@ -11,6 +11,12 @@ model:
     image_size: 32
     channels: 4
     monitor: val/loss_simple_ema
+    sparse: True
+    group: False
+    fix: True
+    sparse_init: ERK
+    init_density: 0.5
+    num_mask: 5
 
     unet_config:
       target: ldm.modules.diffusionmodules.openaimodel.UNetModel
@@ -61,7 +67,7 @@ model:
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 48
+    batch_size: 1
     num_workers: 6
     wrap: false
     train:

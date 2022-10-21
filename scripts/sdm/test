@@ -17,14 +17,12 @@ nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4.yaml -t -
 nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mas-M5-0.5.yaml -t --resume  --gpus 6,7  > M5_S05.txt 2>&1 &
 
 
-
 nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask.yaml -t --gpus 2 > M10_S05.txt 2>&1 &
-
 
 
 ## optimal M
 
-python main.py --base configs/latent-diffusion/celebahq-ldm-vq-8_yaml.yaml -t --gpus 0,1  > Dense_vq_8.txt 2>&1 &
+python main.py --base configs/latent-diffusion/celebahq-ldm-vq-8_yaml-sparse-nogroup-bs1.yaml -t --gpus 0,1  > Dense_vq_8_sparse_nogroup_bs1.txt 2>&1 &
 
 
 sample
