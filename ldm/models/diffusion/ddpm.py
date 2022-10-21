@@ -981,14 +981,17 @@ class LatentDiffusion(DDPM):
         # print(x)
         # print('manual optimization')
         if not self.sparse: # normal update, no mask, no group
-            t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
-
+            if self.group:
+                mask_index = int(torch.randint(0, self.num_mask, (1,)))  # mask index and t are the same for each gpu, but x is sampled differently for each gpu
+                t = torch.randint(int(mask_index*(self.num_timesteps//self.num_mask)), int((mask_index+1)*(self.num_timesteps//self.num_mask)), (x.shape[0],), device=self.device).long()
+            else:
+                t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
         else:
             if self.group: # with mask and  group
                 mask_index = int(torch.randint(0, self.num_mask, (1,)))  # mask index and t are the same for each gpu, but x is sampled differently for each gpu
                 t = torch.randint(int(mask_index*(self.num_timesteps//self.num_mask)), int((mask_index+1)*(self.num_timesteps//self.num_mask)), (x.shape[0],), device=self.device).long()
-                self.mask.init(mode=self.mask.sparse_init, density=self.mask.init_density, mask_index=mask_index)
-            else: # with mask, but no group
+                self.mask.init(mode=self.mask.sparse_init, density=self.mask.init_density, mask_index=int(mask_index))
+            else: # with mask, but no group, only valid for bs=1
                 t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
                 self.mask.init(mode=self.mask.sparse_init, density=self.mask.init_density, mask_index=t)
 
