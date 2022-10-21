@@ -22,7 +22,7 @@ nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask.yaml
 
 ## optimal M
 
-python main.py --base configs/latent-diffusion/celebahq-ldm-vq-8_yaml-sparse-nogroup-bs1.yaml -t --gpus 0,1  > Dense_vq_8_sparse_nogroup_bs1.txt 2>&1 &
+python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-sparse-nogroup-bs1.yaml -t --gpus 0,1  > Dense_vq_8_sparse_nogroup_bs1.txt 2>&1 &
 
 
 sample
