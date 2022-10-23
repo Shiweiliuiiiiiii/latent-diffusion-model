@@ -22,7 +22,17 @@ nohup python main.py --base configs/latent-diffusion/celebahq-ldm-vq-4-mask.yaml
 
 ## optimal M
 
-python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-sparse-nogroup-bs1.yaml -t --gpus 0,1  > Dense_vq_8_sparse_nogroup_bs1.txt 2>&1 &
+python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-sparse-nogroup-bs1-group2.yaml -t --gpus 0,1  > Dense_vq_8_sparse_nogroup_bs2.txt 2>&1 &
+python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-sparse-nogroup-bs1-group5.yaml -t --gpus 2,3  > Dense_vq_8_sparse_nogroup_bs5.txt 2>&1 &
+python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-sparse-nogroup-bs1-group10.yaml -t --gpus 4,5  > Dense_vq_8_sparse_nogroup_bs10.txt 2>&1 &
+python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-sparse-nogroup-bs1-group100.yaml -t --gpus 6,7  > Dense_vq_8_sparse_nogroup_bs100.txt 2>&1 &
+
+sparse:
+python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-sparse-group2.yaml -t --gpus 0,1  > Sparse_vq_8_sparse_nogroup_bs2.txt 2>&1 &
+python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-sparse-group5.yaml -t --gpus 2,3  > Sparse_vq_8_sparse_nogroup_bs5.txt 2>&1 &
+python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-sparse-group10.yaml -t --gpus 4,5  > Sparse_vq_8_sparse_nogroup_bs10.txt 2>&1 &
+python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-sparse-group100.yaml -t --gpus 6,7  > Sparse_vq_8_sparse_nogroup_bs100.txt 2>&1 &
+
 
 
 sample
