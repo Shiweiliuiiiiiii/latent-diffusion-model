@@ -316,8 +316,8 @@ class Masking(object):
             sparse_size += sparse_weight_num
             layer_density = sparse_weight_num / dense_weight_num
             # if layer_density >= 0.99: dense_layers.append(name)
-            print(f'Density of layer {name} with tensor {weight.size()} is {layer_density}')
-        print('Total parameters under sparsity level of {0}: {1}'.format(self.init_density, sparse_size / total_size))
+            # print(f'Density of layer {name} with tensor {weight.size()} is {layer_density}')
+        # print('Total parameters under sparsity level of {0}: {1}'.format(self.init_density, sparse_size / total_size))
         #
         # # masks of layers with density=1 are removed
         # for name in dense_layers:
