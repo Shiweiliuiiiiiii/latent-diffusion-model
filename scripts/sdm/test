@@ -26,7 +26,7 @@ python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_y
 python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-nosparse-group5.yaml -t --gpus 2,3  > Sparse_vq_8_nosparse_group_bs5.txt 2>&1 &
 python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-nosparse-group10.yaml -t --gpus 4,5  > Sparse_vq_8_nosparse_group_bs10.txt 2>&1 &
 python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-nosparse-group100.yaml -t --gpus 6,7  > Sparse_vq_8_nosparse_group_bs100.txt 2>&1 &
-python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-nosparse-group1000.yaml -t --gpus 6,7  > Sparse_vq_8_nosparse_group_bs100ssh shiwei@vita7.ece.utexas.edu0.txt 2>&1 &
+python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-nosparse-group1000.yaml -t --gpus 0,1 --resume > Sparse_vq_8_nosparse_group_bs1000.txt 2>&1 &
 
 
 sparse:
@@ -34,10 +34,18 @@ python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_y
 python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-sparse-group5.yaml -t --gpus 2,3  > Sparse_vq_8_sparse_nogroup_bs5.txt 2>&1 &
 python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-sparse-group10.yaml -t --gpus 4,5  > Sparse_vq_8_sparse_nogroup_bs10.txt 2>&1 &
 python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-sparse-group100.yaml -t --gpus 6,7  > Sparse_vq_8_sparse_nogroup_bs100.txt 2>&1 &
-python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-sparse-group1000.yaml -t --gpus 6,7  > Sparse_vq_8_sparse_nogroup_bs100.txt 2>&1 &
+python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-sparse-group1000.yaml -t --gpus 2,3 --resume > Sparse_vq_8_sparse_nogroup_bs1000_resume.txt 2>&1 &
 
 
 sample
+CUDA_VISIBLE_DEVICES=6 python scripts/sample_diffusion.py -r /ssd1/shiwei/sparse_ldm/latent-diffusion-model/logs/2022-12-10T00-29-37_celebahq-ldm-vq-8_yaml-sparse-group1000/checkpoints/last.ckpt   \
+-l /ssd1/shiwei/ldm/results/celebahq-ldm-vq-8-ns-group1000_last -n 10000 --batch_size 24 -c 200 -e 0.0   > sample_ns-group1000_last.txt 2>&1 &
+
+CUDA_VISIBLE_DEVICES=7 python scripts/sample_diffusion.py -r /ssd1/shiwei/sparse_ldm/latent-diffusion-model/logs/2022-12-10T00-29-34_celebahq-ldm-vq-8_yaml-nosparse-group1000/checkpoints/last.ckpt   \
+-l /ssd1/shiwei/ldm/results/celebahq-ldm-vq-8-sparse-group1000_last -n 10000 --batch_size 24 -c 200 -e 0.0   > sample_sparse-group1000_last.txt 2>&1 &
+
+
+
 CUDA_VISIBLE_DEVICES=0 python scripts/sample_diffusion.py -r /home/shiwei/Projects/latent-diffusion-model/logs/2022-10-21T13-16-44_celebahq-ldm-vq-8_yaml-sparse-nogroup-bs1-group2/checkpoints/last.ckpt   \
 -l /ssd1/shiwei/sparse_ldm/results/celebahq-ldm-vq-8-ns-group2 -n 10000 --batch_size 24 -c 200 -e 0.0   > sample_ns-group2.txt 2>&1 &
 

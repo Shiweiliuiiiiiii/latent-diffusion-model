@@ -1,3 +1,3 @@
 import torch
 
-print(not True)
+print(torch.randint(777, 778, (1,)))
