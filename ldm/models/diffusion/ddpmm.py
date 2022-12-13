@@ -97,7 +97,7 @@ class DDPM(pl.LightningModule):
         self.model1 = DiffusionWrapper(unet_config, conditioning_key)
         self.model2 = DiffusionWrapper(unet_config, conditioning_key)
 
-        count_params(self.model, verbose=True)
+        count_params(self.model1, verbose=True)
         self.use_ema = use_ema
 
         if self.use_ema:
