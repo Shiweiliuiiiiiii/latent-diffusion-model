@@ -492,7 +492,7 @@ class LatentDiffusion(DDPM):
         if self.sparse:
             self.automatic_optimization = False  # enable munual optimization
             self.mask = Masking(None, train_loader=None, prune_mode='magnitude', prune_rate_decay=None, growth_mode='gradient', \
-                           redistribution_mode=None, fix=fix, fp16=False, sparse_init=sparse_init, init_density=init_density, num_mask=self.num_mask, update_frequenc=update_frequency)
+                           redistribution_mode=None, fix=fix, fp16=False, sparse_init=sparse_init, init_density=init_density, num_mask=self.num_mask, update_frequency=update_frequency)
             self.mask.add_module(self.model)
             self.mask.init(mode='ERK_local', density=self.mask.init_density, mask_index=0)
 
