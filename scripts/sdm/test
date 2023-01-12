@@ -29,6 +29,7 @@ python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_y
 python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-nosparse-group10.yaml -t --gpus 4,5  > Sparse_vq_8_nosparse_group_bs10.txt 2>&1 &
 python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-nosparse-group100.yaml -t --gpus 6,7  > Sparse_vq_8_nosparse_group_bs100.txt 2>&1 &
 python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-nosparse-group1000.yaml -t --gpus 0,1 --resume > Sparse_vq_8_nosparse_group_bs1000.txt 2>&1 &
+python main.py --base configs/latent-diffusion/test_settings/celebahq-ldm-vq-8_yaml-sparse-group2-density0.5-rigl.yaml -t --gpus 0,1  > Sparse_vq_8_sparse_group2_density0.5_rigl.txt 2>&1 &
 
 
 sparse:
