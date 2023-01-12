@@ -450,6 +450,7 @@ class LatentDiffusion(DDPM):
                  sparse_init='ERK',
                  init_density=0.3,
                  num_mask=10,
+                 update_frequency=500,
                  *args, **kwargs):
         # initializing masks
         self.sparse = sparse
@@ -490,10 +491,10 @@ class LatentDiffusion(DDPM):
 
         if self.sparse:
             self.automatic_optimization = False  # enable munual optimization
-            self.mask = Masking(None, train_loader=None, prune_mode='magnitude', prune_rate_decay=None, growth_mode='random', \
-                           redistribution_mode=None, fix=fix, fp16=False, sparse_init=sparse_init, init_density=init_density, num_mask=self.num_mask)
+            self.mask = Masking(None, train_loader=None, prune_mode='magnitude', prune_rate_decay=None, growth_mode='gradient', \
+                           redistribution_mode=None, fix=fix, fp16=False, sparse_init=sparse_init, init_density=init_density, num_mask=self.num_mask, update_frequenc=update_frequency)
             self.mask.add_module(self.model)
-            # self.mask.init(mode='ERK', density=self.mask.init_density, mask_index=0)
+            self.mask.init(mode='ERK_local', density=self.mask.init_density, mask_index=0)
 
     def training_step(self, batch, batch_idx):
         if self.automatic_optimization:
@@ -537,6 +538,10 @@ class LatentDiffusion(DDPM):
 
             if self.sparse:
                 self.mask.apply_mask()
+
+                # perform prune-and-grow
+                if self.mask.mask_update % self.mask.prune_every_k_steps == 0:
+                    self.mask.truncate_weights()
 
                 # reload weights before update
                 for name, tensor in self.model.named_parameters():
@@ -990,13 +995,16 @@ class LatentDiffusion(DDPM):
             if self.group: # with mask and  group
                 mask_index = int(torch.randint(0, self.num_mask, (1,)))  # mask index and t are the same for each gpu, but x is sampled differently for each gpu
                 t = torch.randint(int(mask_index*(self.num_timesteps//self.num_mask)), int((mask_index+1)*(self.num_timesteps//self.num_mask)), (x.shape[0],), device=self.device).long()
-                self.mask.init(mode=self.mask.sparse_init, density=self.mask.init_density, mask_index=int(mask_index))
+                # set masks[mask_index] to self.masks
+                self.mask.masks = self.mask.masks_local[mask_index]
+                self.mask.apply_mask()
             else: # with mask, but no group, only valid for bs=1
                 t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
-                self.mask.init(mode=self.mask.sparse_init, density=self.mask.init_density, mask_index=t)
+                self.mask.apply_mask()
 
             # mask update count +1
             self.mask.mask_updates[mask_index] += 1
+            self.mask.mask_update = self.mask.mask_updates[mask_index]
 
         if self.model.conditioning_key is not None:
             assert c is not None

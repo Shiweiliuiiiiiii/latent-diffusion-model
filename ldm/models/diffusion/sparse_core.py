@@ -104,18 +104,19 @@ class Masking(object):
       - `mask.remove_type(type)` removes all layers of a certain type. For example,
         mask.remove_type(torch.nn.BatchNorm2d) removes all 2D batch norm layers.
     """
-    def __init__(self, optimizer, train_loader, prune_rate_decay, prune_rate=0.5, prune_mode='magnitude', growth_mode='momentum', redistribution_mode='momentum', verbose=False, fp16=False, **kwargs):
+    def __init__(self, optimizer, train_loader, prune_rate_decay, prune_rate=0.5, prune_mode='magnitude', growth_mode='momentum', redistribution_mode='momentum', verbose=False, fp16=False, num_mask=1,**kwargs):
         growth_modes = ['random', 'momentum', 'momentum_neuron', 'gradient']
         if growth_mode not in growth_modes:
             print('Growth mode: {0} not supported!'.format(growth_mode))
             print('Supported modes are:', str(growth_modes))
 
+        self.num_mask = num_mask
+        self.mask_updates = torch.zeros(self.num_mask)
+        self.mask_update = 0
         self.device = 'cuda'
         self.sparse_init = kwargs['sparse_init']
         self.init_density = kwargs['init_density']
-        self.growth_mode = growth_mode
-        self.prune_mode = prune_mode
-        self.redistribution_mode = redistribution_mode
+
         self.prune_rate_decay = prune_rate_decay
         self.verbose = verbose
         self.train_loader = train_loader
@@ -127,6 +128,7 @@ class Masking(object):
         self.global_prune = False
 
         self.masks = {}
+        self.masks_local = [{}] * 2
         self.modules = []
         self.names = []
         self.optimizer = optimizer
@@ -209,6 +211,93 @@ class Masking(object):
             self.steps = self.prune_rate_decay.steps
             print(f"Resuming from {self.steps} steps" )
 
+        elif mode == 'ERK_local':
+            # print('initialize by fixed_ERK')
+            if not self.layer_wise_sparsity:
+                total_params = 0
+                self.baseline_nonzero = 0
+                for name, weight in self.masks.items():
+                    total_params += weight.numel()
+                    self.baseline_nonzero += weight.numel() * density
+                is_epsilon_valid = False
+                dense_layers = set()
+                while not is_epsilon_valid:
+                    divisor = 0
+                    rhs = 0
+                    raw_probabilities = {}
+                    for name, mask in self.masks.items():
+                        n_param = np.prod(mask.shape)
+                        n_zeros = n_param * (1 - density)
+                        n_ones = n_param * density
+
+                        if name in dense_layers:
+                            # See `- default_sparsity * (N_3 + N_4)` part of the equation above.
+                            rhs -= n_zeros
+
+                        else:
+                            # Corresponds to `(1 - default_sparsity) * (N_1 + N_2)` part of the
+                            # equation above.
+                            rhs += n_ones
+                            # Erdos-Renyi probability: epsilon * (n_in + n_out / n_in * n_out).
+                            raw_probabilities[name] = (
+                                                              np.sum(mask.shape) / np.prod(mask.shape)
+                                                      ) ** erk_power_scale
+                            # Note that raw_probabilities[mask] * n_param gives the individual
+                            # elements of the divisor.
+                            divisor += raw_probabilities[name] * n_param
+                    # By multipliying individual probabilites with epsilon, we should get the
+                    # number of parameters per layer correctly.
+                    epsilon = rhs / divisor
+                    # If epsilon * raw_probabilities[mask.name] > 1. We set the sparsities of that
+                    # mask to 0., so they become part of dense_layers sets.
+                    max_prob = np.max(list(raw_probabilities.values()))
+                    max_prob_one = max_prob * epsilon
+                    if max_prob_one > 1:
+                        is_epsilon_valid = False
+                        for mask_name, mask_raw_prob in raw_probabilities.items():
+                            if mask_raw_prob == max_prob:
+                                # print(f"Sparsity of var:{mask_name} had to be set to 0.")
+                                dense_layers.add(mask_name)
+                    else:
+                        is_epsilon_valid = True
+
+                # With the valid epsilon, we can set sparsities of the remaning layers.
+                for name, mask in self.masks.items():
+                    n_param = np.prod(mask.shape)
+                    if name in dense_layers:
+                        self.layer_wise_sparsity[name] = 1.0
+                    else:
+                        probability_one = epsilon * raw_probabilities[name]
+                        self.layer_wise_sparsity[name] = probability_one
+                    # print(
+                    #     f"layer: {name}, shape: {mask.shape}, density: {density_dict[name]}"
+                    # )
+
+            total_nonzero = 0.0
+            total_weight = 0.0
+            generator = torch.Generator(device='cuda')
+            generator.manual_seed(0)
+            # With the valid epsilon, we can set sparsities of the remaning layers.
+            for name, mask in self.masks.items():
+                self.masks_local[0][name] = (torch.rand(mask.shape, generator=generator, device='cuda') < self.layer_wise_sparsity[name])
+                total_nonzero += self.layer_wise_sparsity[name] * mask.numel()
+                total_weight += mask.numel()
+            print(f"Overall sparsity {total_nonzero / total_weight}")
+
+
+            total_nonzero = 0.0
+            total_weight = 0.0
+            generator = torch.Generator(device='cuda')
+            generator.manual_seed(0)
+            # With the valid epsilon, we can set sparsities of the remaning layers.
+            for name, mask in self.masks.items():
+                self.masks_local[1][name] = (torch.rand(mask.shape, generator=generator, device='cuda') < self.layer_wise_sparsity[name])
+                total_nonzero += self.layer_wise_sparsity[name] * mask.numel()
+                total_weight += mask.numel()
+            print(f"Overall sparsity {total_nonzero / total_weight}")
+
+            self.masks = self.masks_local[0]
+
         elif mode == 'ERK':
             # print('initialize by fixed_ERK')
             if not self.layer_wise_sparsity:
@@ -218,28 +307,8 @@ class Masking(object):
                     total_params += weight.numel()
                     self.baseline_nonzero += weight.numel() * density
                 is_epsilon_valid = False
-                # The following loop will terminate worst case when all masks are in the
-                # custom_sparsity_map. This should probably never happen though, since once
-                # we have a single variable or more with the same constant, we have a valid
-                # epsilon. Note that for each iteration we add at least one variable to the
-                # custom_sparsity_map and therefore this while loop should terminate.
                 dense_layers = set()
                 while not is_epsilon_valid:
-                    # We will start with all layers and try to find right epsilon. However if
-                    # any probablity exceeds 1, we will make that layer dense and repeat the
-                    # process (finding epsilon) with the non-dense layers.
-                    # We want the total number of connections to be the same. Let say we have
-                    # for layers with N_1, ..., N_4 parameters each. Let say after some
-                    # iterations probability of some dense layers (3, 4) exceeded 1 and
-                    # therefore we added them to the dense_layers set. Those layers will not
-                    # scale with erdos_renyi, however we need to count them so that target
-                    # paratemeter count is achieved. See below.
-                    # eps * (p_1 * N_1 + p_2 * N_2) + (N_3 + N_4) =
-                    #    (1 - default_sparsity) * (N_1 + N_2 + N_3 + N_4)
-                    # eps * (p_1 * N_1 + p_2 * N_2) =
-                    #    (1 - default_sparsity) * (N_1 + N_2) - default_sparsity * (N_3 + N_4)
-                    # eps = rhs / (\sum_i p_i * N_i) = rhs / divisor.
-
                     divisor = 0
                     rhs = 0
                     raw_probabilities = {}
@@ -302,29 +371,8 @@ class Masking(object):
                 total_weight += mask.numel()
             print(f"Overall sparsity {total_nonzero / total_weight}")
 
-            # synchronism masks
-            # if self.args.distributed:
-            # self.synchronism_masks()
+            self.apply_mask()
 
-        total_size = 0
-        sparse_size = 0
-        # dense_layers = []
-        for name, weight in self.masks.items():
-            dense_weight_num = weight.numel()
-            sparse_weight_num = (weight != 0).sum().int().item()
-            total_size += dense_weight_num
-            sparse_size += sparse_weight_num
-            layer_density = sparse_weight_num / dense_weight_num
-            # if layer_density >= 0.99: dense_layers.append(name)
-            # print(f'Density of layer {name} with tensor {weight.size()} is {layer_density}')
-        # print('Total parameters under sparsity level of {0}: {1}'.format(self.init_density, sparse_size / total_size))
-        #
-        # # masks of layers with density=1 are removed
-        # for name in dense_layers:
-        #     self.masks.pop(name)
-        #     print(f"pop out layer {name}")
-
-        self.apply_mask()
 
     def init_growth_prune_and_redist(self):
         if isinstance(self.growth_func, str) and self.growth_func in growth_funcs:
@@ -500,6 +548,7 @@ class Masking(object):
                             tensor2 = self.name_to_32bit[name]
                             tensor2.data = tensor2.data*self.masks[name]
 
+
     def adjust_prune_rate(self):
         for module in self.modules:
             for name, weight in module.named_parameters():
@@ -517,6 +566,7 @@ class Masking(object):
                     if expected_vs_actual < 1.0:
                         # growing
                         self.name2prune_rate[name] = min(sparsity, self.name2prune_rate[name])
+
 
     def truncate_weights(self):
 
