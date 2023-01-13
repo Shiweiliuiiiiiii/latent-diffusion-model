@@ -206,7 +206,9 @@ def gradient_growth(masking, name, new_mask, total_regrowth, weight):
 
     # operate on zero mask ind
 
-    all_ind = torch.arange(grad.numel()).view(grad.shape)
+    all_ind = torch.arange(grad.numel(), device=grad.device).view(grad.shape)
+    all_ind = all_ind.to(grad.device)
+    new_mask = new_mask.to(grad.device)
 
     select_ind = all_ind[new_mask == 0]
 
