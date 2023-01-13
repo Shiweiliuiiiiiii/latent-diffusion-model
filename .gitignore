@@ -1,4 +1,8 @@
 __pycache__
-data/
-models/
+data
+models
 logs/
+src
+results/
+*.out
+latent_diffusion.egg-info/
