@@ -279,7 +279,7 @@ class Masking(object):
             generator.manual_seed(0)
             # With the valid epsilon, we can set sparsities of the remaning layers.
             for name, mask in self.masks.items():
-                self.masks_local[0][name] = (torch.rand(mask.shape, generator=generator, device='cuda') < self.layer_wise_sparsity[name])
+                self.masks_local[0][name] = torch.rand(mask.shape, generator=generator, device='cuda') < self.layer_wise_sparsity[name]
                 total_nonzero += self.layer_wise_sparsity[name] * mask.numel()
                 total_weight += mask.numel()
             print(f"Overall sparsity {total_nonzero / total_weight}")
@@ -291,7 +291,7 @@ class Masking(object):
             generator.manual_seed(0)
             # With the valid epsilon, we can set sparsities of the remaning layers.
             for name, mask in self.masks.items():
-                self.masks_local[1][name] = (torch.rand(mask.shape, generator=generator, device='cuda') < self.layer_wise_sparsity[name])
+                self.masks_local[1][name] = torch.rand(mask.shape, generator=generator, device='cuda') < self.layer_wise_sparsity[name]
                 total_nonzero += self.layer_wise_sparsity[name] * mask.numel()
                 total_weight += mask.numel()
             print(f"Overall sparsity {total_nonzero / total_weight}")
@@ -366,7 +366,7 @@ class Masking(object):
             generator.manual_seed(int(mask_index))
             # With the valid epsilon, we can set sparsities of the remaning layers.
             for name, mask in self.masks.items():
-                self.masks[name][:] = (torch.rand(mask.shape, generator=generator, device='cuda') < self.layer_wise_sparsity[name])
+                self.masks[name][:] = torch.rand(mask.shape, generator=generator, device='cuda') < self.layer_wise_sparsity[name]
                 total_nonzero += self.layer_wise_sparsity[name] * mask.numel()
                 total_weight += mask.numel()
             print(f"Overall sparsity {total_nonzero / total_weight}")
