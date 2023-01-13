@@ -24,24 +24,13 @@ from ldm.modules.distributions.distributions import normal_kl, DiagonalGaussianD
 from ldm.models.autoencoder import VQModelInterface, IdentityFirstStage, AutoencoderKL
 from ldm.modules.diffusionmodules.util import make_beta_schedule, extract_into_tensor, noise_like
 from ldm.models.diffusion.ddim import DDIMSampler
-import copy
-import sys
-# sys.path.append('/home/sliu/project_space/latent-diffusion/ldm/models/diffusion/')
-from .sparse_core import Masking, CosineDecay
+
 
 __conditioning_keys__ = {'concat': 'c_concat',
                          'crossattn': 'c_crossattn',
                          'adm': 'y'}
-def get_model_params(model):
-    params = {}
-    for name, weight in model.name_parameters():
-        if name in self.mask.masks():
-            params[name] = copy.deepcopy(weight)
-    return params
 
 
-def set_model_params(model, model_parameters):
-    model.load_state_dict(model_parameters)
 def disabled_train(self, mode=True):
     """Overwrite model.train with this function to make sure train/eval mode
     does not change anymore."""
@@ -120,11 +109,9 @@ class DDPM(pl.LightningModule):
         self.loss_type = loss_type
 
         self.learn_logvar = learn_logvar
-        # self.logvar = torch.full(fill_value=logvar_init, size=(self.num_timesteps,))
+        self.logvar = torch.full(fill_value=logvar_init, size=(self.num_timesteps,))
         if self.learn_logvar:
-            self.logvar = nn.Parameter(torch.full(fill_value=logvar_init, size=(self.num_timesteps,)), requires_grad=True)
-        else:
-            self.register_buffer('logvar', torch.full(fill_value=logvar_init, size=(self.num_timesteps,)))
+            self.logvar = nn.Parameter(self.logvar, requires_grad=True)
 
 
     def register_schedule(self, given_betas=None, beta_schedule="linear", timesteps=1000,
@@ -169,6 +156,7 @@ class DDPM(pl.LightningModule):
         self.register_buffer('posterior_mean_coef2', to_torch(
             (1. - alphas_cumprod_prev) * np.sqrt(alphas) / (1. - alphas_cumprod)))
 
+        print('===>', self.betas[:5], self.posterior_variance[:5], to_torch(alphas)[:5], self.alphas_cumprod[:5])
         if self.parameterization == "eps":
             lvlb_weights = self.betas ** 2 / (
                         2 * self.posterior_variance * to_torch(alphas) * (1 - self.alphas_cumprod))
@@ -180,6 +168,7 @@ class DDPM(pl.LightningModule):
         lvlb_weights[0] = lvlb_weights[1]
         self.register_buffer('lvlb_weights', lvlb_weights, persistent=False)
         assert not torch.isnan(self.lvlb_weights).all()
+        print('lvlb_weights', lvlb_weights[:5])
 
     @contextmanager
     def ema_scope(self, context=None):
@@ -447,17 +436,7 @@ class LatentDiffusion(DDPM):
                  conditioning_key=None,
                  scale_factor=1.0,
                  scale_by_std=False,
-                 sparse=False,
-                 group=False,
-                 fix=True,
-                 sparse_init='ERK',
-                 init_density=0.3,
-                 num_mask=10,
                  *args, **kwargs):
-        # initializing masks
-        self.sparse = sparse
-        self.group = group
-        self.num_mask = num_mask
         self.num_timesteps_cond = default(num_timesteps_cond, 1)
         self.scale_by_std = scale_by_std
         assert self.num_timesteps_cond <= kwargs['timesteps']
@@ -490,96 +469,6 @@ class LatentDiffusion(DDPM):
         if ckpt_path is not None:
             self.init_from_ckpt(ckpt_path, ignore_keys)
             self.restarted_from_ckpt = True
-
-        if self.sparse:
-            self.automatic_optimization = False  # enable munual optimization
-            self.mask = Masking(None, train_loader=None, prune_mode='magnitude', prune_rate_decay=None, growth_mode='random', \
-                           redistribution_mode=None, fix=fix, fp16=False, sparse_init=sparse_init, init_density=init_density, num_mask=self.num_mask)
-            self.mask.add_module(self.model)
-            # self.mask.init(mode='ERK', density=self.mask.init_density, mask_index=0)
-
-    def training_step(self, batch, batch_idx):
-        if self.automatic_optimization:
-            loss, loss_dict = self.shared_step(batch)
-
-            self.log_dict(loss_dict, prog_bar=True,
-                          logger=True, on_step=True, on_epoch=True)
-
-            self.log("global_step", self.global_step,
-                     prog_bar=True, logger=True, on_step=True, on_epoch=False)
-
-            if self.use_scheduler:
-                lr = self.optimizers().param_groups[0]['lr']
-                self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
-
-        else:
-            # print('manual optimization')
-            if self.sparse:
-                self.saved_params = {}
-                for name, tensor in self.model.named_parameters():
-                    if name in self.mask.masks:
-                        self.saved_params[name] = copy.deepcopy(tensor)
-
-            opt = self.optimizers()
-            opt.zero_grad()
-
-            loss, loss_dict = self.shared_step(batch)
-
-            self.log_dict(loss_dict, prog_bar=True,
-                          logger=True, on_step=True, on_epoch=True)
-
-            self.log("global_step", self.global_step,
-                     prog_bar=True, logger=True, on_step=True, on_epoch=False)
-
-            if self.use_scheduler:
-                lr = self.optimizers().param_groups[0]['lr']
-                self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
-
-            self.manual_backward(loss)
-            opt.step()
-
-            if self.sparse:
-                self.mask.apply_mask()
-
-                # reload weights before update
-                for name, tensor in self.model.named_parameters():
-                    if name in self.mask.masks:
-                        tensor.data.copy_(tensor.data + (1-self.mask.masks[name]).to(tensor.device) * self.saved_params[name].data)
-
-        return loss
-
-    @torch.no_grad()
-    def validation_step(self, batch, batch_idx):
-        if self.automatic_optimization:
-            _, loss_dict_no_ema = self.shared_step(batch)
-            with self.ema_scope():
-                _, loss_dict_ema = self.shared_step(batch)
-                loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
-            self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
-            self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
-        else:
-            self.saved_params = {}
-            for name, tensor in self.model.named_parameters():
-                if name in self.mask.masks:
-                    self.saved_params[name] = copy.deepcopy(tensor)
-
-            _, loss_dict_no_ema = self.shared_step(batch)
-
-            # reload weights back to self.model
-            for name, tensor in self.model.named_parameters():
-                if name in self.mask.masks:
-                    tensor.data.copy_(self.saved_params[name].data)
-
-            with self.ema_scope():
-                _, loss_dict_ema = self.shared_step(batch)
-                loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
-            self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
-            self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
-
-            # reload weights back to self.model
-            for name, tensor in self.model.named_parameters():
-                if name in self.mask.masks:
-                    tensor.data.copy_(self.saved_params[name].data)
 
     def make_cond_schedule(self, ):
         self.cond_ids = torch.full(size=(self.num_timesteps,), fill_value=self.num_timesteps - 1, dtype=torch.long)
@@ -981,26 +870,7 @@ class LatentDiffusion(DDPM):
         return loss
 
     def forward(self, x, c, *args, **kwargs):
-        # print(x)
-        # print('manual optimization')
-        if not self.sparse: # normal update, no mask, no group
-            if self.group:
-                mask_index = int(torch.randint(0, self.num_mask, (1,)))  # mask index and t are the same for each gpu, but x is sampled differently for each gpu
-                t = torch.randint(int(mask_index*(self.num_timesteps//self.num_mask)), int((mask_index+1)*(self.num_timesteps//self.num_mask)), (x.shape[0],), device=self.device).long()
-            else:
-                t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
-        else:
-            if self.group: # with mask and  group
-                mask_index = int(torch.randint(0, self.num_mask, (1,)))  # mask index and t are the same for each gpu, but x is sampled differently for each gpu
-                t = torch.randint(int(mask_index*(self.num_timesteps//self.num_mask)), int((mask_index+1)*(self.num_timesteps//self.num_mask)), (x.shape[0],), device=self.device).long()
-                self.mask.init(mode=self.mask.sparse_init, density=self.mask.init_density, mask_index=int(mask_index))
-            else: # with mask, but no group, only valid for bs=1
-                t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
-                self.mask.init(mode=self.mask.sparse_init, density=self.mask.init_density, mask_index=t)
-
-            # mask update count +1
-            self.mask.mask_updates[mask_index] += 1
-
+        t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
         if self.model.conditioning_key is not None:
             assert c is not None
             if self.cond_stage_trainable:
@@ -1169,6 +1039,7 @@ class LatentDiffusion(DDPM):
         loss = self.l_simple_weight * loss.mean()
 
         loss_vlb = self.get_loss(model_output, target, mean=False).mean(dim=(1, 2, 3))
+        # print(self.lvlb_weights[t], '????')
         loss_vlb = (self.lvlb_weights[t] * loss_vlb).mean()
         loss_dict.update({f'{prefix}/loss_vlb': loss_vlb})
         loss += (self.original_elbo_weight * loss_vlb)

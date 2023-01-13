@@ -8,7 +8,9 @@ from omegaconf import OmegaConf
 from PIL import Image
 
 import sys
-sys.path.append('/home/shiwei/Projects/latent-diffusion-model/ldm')
+sys.path.append('/home/dejia.xu/repo/sparse_diffusion/')
+sys.path.append('../..')
+# sys.path.append('/home/shiwei/Projects/latent-diffusion-model/ldm')
 
 from ldm.models.diffusion.ddim import DDIMSampler
 from ldm.util import instantiate_from_config

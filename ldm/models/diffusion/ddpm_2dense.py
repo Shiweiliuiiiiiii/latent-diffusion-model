@@ -24,24 +24,13 @@ from ldm.modules.distributions.distributions import normal_kl, DiagonalGaussianD
 from ldm.models.autoencoder import VQModelInterface, IdentityFirstStage, AutoencoderKL
 from ldm.modules.diffusionmodules.util import make_beta_schedule, extract_into_tensor, noise_like
 from ldm.models.diffusion.ddim import DDIMSampler
-import copy
-import sys
-# sys.path.append('/home/sliu/project_space/latent-diffusion/ldm/models/diffusion/')
-from .sparse_core import Masking, CosineDecay
+
 
 __conditioning_keys__ = {'concat': 'c_concat',
                          'crossattn': 'c_crossattn',
                          'adm': 'y'}
-def get_model_params(model):
-    params = {}
-    for name, weight in model.name_parameters():
-        if name in self.mask.masks():
-            params[name] = copy.deepcopy(weight)
-    return params
 
 
-def set_model_params(model, model_parameters):
-    model.load_state_dict(model_parameters)
 def disabled_train(self, mode=True):
     """Overwrite model.train with this function to make sure train/eval mode
     does not change anymore."""
@@ -95,11 +84,13 @@ class DDPM(pl.LightningModule):
         self.channels = channels
         self.use_positional_encodings = use_positional_encodings
         self.model = DiffusionWrapper(unet_config, conditioning_key)
-        count_params(self.model, verbose=True)
+        self.model2 = DiffusionWrapper(unet_config, conditioning_key)
+        # count_params(self.model, verbose=True)
         self.use_ema = use_ema
         if self.use_ema:
             self.model_ema = LitEma(self.model)
-            print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
+            self.model2_ema = LitEma(self.model2)
+            print(f"Keeping EMAs of {len(list(self.model_ema.buffers()) + list(self.model2_ema.buffers()))}.")
 
         self.use_scheduler = scheduler_config is not None
         if self.use_scheduler:
@@ -120,11 +111,9 @@ class DDPM(pl.LightningModule):
         self.loss_type = loss_type
 
         self.learn_logvar = learn_logvar
-        # self.logvar = torch.full(fill_value=logvar_init, size=(self.num_timesteps,))
+        self.logvar = torch.full(fill_value=logvar_init, size=(self.num_timesteps,))
         if self.learn_logvar:
-            self.logvar = nn.Parameter(torch.full(fill_value=logvar_init, size=(self.num_timesteps,)), requires_grad=True)
-        else:
-            self.register_buffer('logvar', torch.full(fill_value=logvar_init, size=(self.num_timesteps,)))
+            self.logvar = nn.Parameter(self.logvar, requires_grad=True)
 
 
     def register_schedule(self, given_betas=None, beta_schedule="linear", timesteps=1000,
@@ -169,6 +158,7 @@ class DDPM(pl.LightningModule):
         self.register_buffer('posterior_mean_coef2', to_torch(
             (1. - alphas_cumprod_prev) * np.sqrt(alphas) / (1. - alphas_cumprod)))
 
+        print('===>', self.betas[:5], self.posterior_variance[:5], to_torch(alphas)[:5], self.alphas_cumprod[:5])
         if self.parameterization == "eps":
             lvlb_weights = self.betas ** 2 / (
                         2 * self.posterior_variance * to_torch(alphas) * (1 - self.alphas_cumprod))
@@ -180,12 +170,15 @@ class DDPM(pl.LightningModule):
         lvlb_weights[0] = lvlb_weights[1]
         self.register_buffer('lvlb_weights', lvlb_weights, persistent=False)
         assert not torch.isnan(self.lvlb_weights).all()
+        print('lvlb_weights', lvlb_weights[:5])
 
     @contextmanager
     def ema_scope(self, context=None):
         if self.use_ema:
             self.model_ema.store(self.model.parameters())
             self.model_ema.copy_to(self.model)
+            self.model2_ema.store(self.model2.parameters())
+            self.model2_ema.copy_to(self.model2)
             if context is not None:
                 print(f"{context}: Switched to EMA weights")
         try:
@@ -193,6 +186,7 @@ class DDPM(pl.LightningModule):
         finally:
             if self.use_ema:
                 self.model_ema.restore(self.model.parameters())
+                self.model2_ema.restore(self.model2.parameters())
                 if context is not None:
                     print(f"{context}: Restored training weights")
 
@@ -379,6 +373,7 @@ class DDPM(pl.LightningModule):
     def on_train_batch_end(self, *args, **kwargs):
         if self.use_ema:
             self.model_ema(self.model)
+            self.model2_ema(self.model2)
 
     def _get_rows_from_list(self, samples):
         n_imgs_per_row = len(samples)
@@ -447,17 +442,7 @@ class LatentDiffusion(DDPM):
                  conditioning_key=None,
                  scale_factor=1.0,
                  scale_by_std=False,
-                 sparse=False,
-                 group=False,
-                 fix=True,
-                 sparse_init='ERK',
-                 init_density=0.3,
-                 num_mask=10,
                  *args, **kwargs):
-        # initializing masks
-        self.sparse = sparse
-        self.group = group
-        self.num_mask = num_mask
         self.num_timesteps_cond = default(num_timesteps_cond, 1)
         self.scale_by_std = scale_by_std
         assert self.num_timesteps_cond <= kwargs['timesteps']
@@ -490,96 +475,6 @@ class LatentDiffusion(DDPM):
         if ckpt_path is not None:
             self.init_from_ckpt(ckpt_path, ignore_keys)
             self.restarted_from_ckpt = True
-
-        if self.sparse:
-            self.automatic_optimization = False  # enable munual optimization
-            self.mask = Masking(None, train_loader=None, prune_mode='magnitude', prune_rate_decay=None, growth_mode='random', \
-                           redistribution_mode=None, fix=fix, fp16=False, sparse_init=sparse_init, init_density=init_density, num_mask=self.num_mask)
-            self.mask.add_module(self.model)
-            # self.mask.init(mode='ERK', density=self.mask.init_density, mask_index=0)
-
-    def training_step(self, batch, batch_idx):
-        if self.automatic_optimization:
-            loss, loss_dict = self.shared_step(batch)
-
-            self.log_dict(loss_dict, prog_bar=True,
-                          logger=True, on_step=True, on_epoch=True)
-
-            self.log("global_step", self.global_step,
-                     prog_bar=True, logger=True, on_step=True, on_epoch=False)
-
-            if self.use_scheduler:
-                lr = self.optimizers().param_groups[0]['lr']
-                self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
-
-        else:
-            # print('manual optimization')
-            if self.sparse:
-                self.saved_params = {}
-                for name, tensor in self.model.named_parameters():
-                    if name in self.mask.masks:
-                        self.saved_params[name] = copy.deepcopy(tensor)
-
-            opt = self.optimizers()
-            opt.zero_grad()
-
-            loss, loss_dict = self.shared_step(batch)
-
-            self.log_dict(loss_dict, prog_bar=True,
-                          logger=True, on_step=True, on_epoch=True)
-
-            self.log("global_step", self.global_step,
-                     prog_bar=True, logger=True, on_step=True, on_epoch=False)
-
-            if self.use_scheduler:
-                lr = self.optimizers().param_groups[0]['lr']
-                self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
-
-            self.manual_backward(loss)
-            opt.step()
-
-            if self.sparse:
-                self.mask.apply_mask()
-
-                # reload weights before update
-                for name, tensor in self.model.named_parameters():
-                    if name in self.mask.masks:
-                        tensor.data.copy_(tensor.data + (1-self.mask.masks[name]).to(tensor.device) * self.saved_params[name].data)
-
-        return loss
-
-    @torch.no_grad()
-    def validation_step(self, batch, batch_idx):
-        if self.automatic_optimization:
-            _, loss_dict_no_ema = self.shared_step(batch)
-            with self.ema_scope():
-                _, loss_dict_ema = self.shared_step(batch)
-                loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
-            self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
-            self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
-        else:
-            self.saved_params = {}
-            for name, tensor in self.model.named_parameters():
-                if name in self.mask.masks:
-                    self.saved_params[name] = copy.deepcopy(tensor)
-
-            _, loss_dict_no_ema = self.shared_step(batch)
-
-            # reload weights back to self.model
-            for name, tensor in self.model.named_parameters():
-                if name in self.mask.masks:
-                    tensor.data.copy_(self.saved_params[name].data)
-
-            with self.ema_scope():
-                _, loss_dict_ema = self.shared_step(batch)
-                loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
-            self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
-            self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
-
-            # reload weights back to self.model
-            for name, tensor in self.model.named_parameters():
-                if name in self.mask.masks:
-                    tensor.data.copy_(self.saved_params[name].data)
 
     def make_cond_schedule(self, ):
         self.cond_ids = torch.full(size=(self.num_timesteps,), fill_value=self.num_timesteps - 1, dtype=torch.long)
@@ -981,26 +876,7 @@ class LatentDiffusion(DDPM):
         return loss
 
     def forward(self, x, c, *args, **kwargs):
-        # print(x)
-        # print('manual optimization')
-        if not self.sparse: # normal update, no mask, no group
-            if self.group:
-                mask_index = int(torch.randint(0, self.num_mask, (1,)))  # mask index and t are the same for each gpu, but x is sampled differently for each gpu
-                t = torch.randint(int(mask_index*(self.num_timesteps//self.num_mask)), int((mask_index+1)*(self.num_timesteps//self.num_mask)), (x.shape[0],), device=self.device).long()
-            else:
-                t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
-        else:
-            if self.group: # with mask and  group
-                mask_index = int(torch.randint(0, self.num_mask, (1,)))  # mask index and t are the same for each gpu, but x is sampled differently for each gpu
-                t = torch.randint(int(mask_index*(self.num_timesteps//self.num_mask)), int((mask_index+1)*(self.num_timesteps//self.num_mask)), (x.shape[0],), device=self.device).long()
-                self.mask.init(mode=self.mask.sparse_init, density=self.mask.init_density, mask_index=int(mask_index))
-            else: # with mask, but no group, only valid for bs=1
-                t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
-                self.mask.init(mode=self.mask.sparse_init, density=self.mask.init_density, mask_index=t)
-
-            # mask update count +1
-            self.mask.mask_updates[mask_index] += 1
-
+        t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
         if self.model.conditioning_key is not None:
             assert c is not None
             if self.cond_stage_trainable:
@@ -1021,6 +897,16 @@ class LatentDiffusion(DDPM):
         return [rescale_bbox(b) for b in bboxes]
 
     def apply_model(self, x_noisy, t, cond, return_ids=False):
+        msk = t < 500
+        msk = msk.reshape(-1, 1, 1, 1)
+        res1 = self.manual_forward(self.model, x_noisy, t, cond, return_ids)
+        res2 = self.manual_forward(self.model2, x_noisy, t, cond, return_ids)
+        # print(res1.shape, res2.shape, t.shape, msk.shape)
+        # ?it/s]torch.Size([48, 4, 32, 32]) torch.Size([48, 4, 32, 32]) torch.Size([48]) torch.Size([48])
+        res = res1 * msk + res2 * (~msk)
+        return res
+    
+    def manual_forward(self, model, x_noisy, t, cond, return_ids=False):
 
         if isinstance(cond, dict):
             # hybrid case, cond is exptected to be a dict
@@ -1028,7 +914,7 @@ class LatentDiffusion(DDPM):
         else:
             if not isinstance(cond, list):
                 cond = [cond]
-            key = 'c_concat' if self.model.conditioning_key == 'concat' else 'c_crossattn'
+            key = 'c_concat' if model.conditioning_key == 'concat' else 'c_crossattn'
             cond = {key: cond}
 
         if hasattr(self, "split_input_params"):
@@ -1047,7 +933,7 @@ class LatentDiffusion(DDPM):
             z_list = [z[:, :, :, :, i] for i in range(z.shape[-1])]
 
             if self.cond_stage_key in ["image", "LR_image", "segmentation",
-                                       'bbox_img'] and self.model.conditioning_key:  # todo check for completeness
+                                       'bbox_img'] and model.conditioning_key:  # todo check for completeness
                 c_key = next(iter(cond.keys()))  # get key
                 c = next(iter(cond.values()))  # get value
                 assert (len(c) == 1)  # todo extend to list with more than one elem
@@ -1104,7 +990,7 @@ class LatentDiffusion(DDPM):
                 cond_list = [cond for i in range(z.shape[-1])]  # Todo make this more efficient
 
             # apply model by loop over crops
-            output_list = [self.model(z_list[i], t, **cond_list[i]) for i in range(z.shape[-1])]
+            output_list = [model(z_list[i], t, **cond_list[i]) for i in range(z.shape[-1])]
             assert not isinstance(output_list[0],
                                   tuple)  # todo cant deal with multiple model outputs check this never happens
 
@@ -1116,7 +1002,7 @@ class LatentDiffusion(DDPM):
             x_recon = fold(o) / normalization
 
         else:
-            x_recon = self.model(x_noisy, t, **cond)
+            x_recon = model(x_noisy, t, **cond)
 
         if isinstance(x_recon, tuple) and not return_ids:
             return x_recon[0]
@@ -1169,6 +1055,7 @@ class LatentDiffusion(DDPM):
         loss = self.l_simple_weight * loss.mean()
 
         loss_vlb = self.get_loss(model_output, target, mean=False).mean(dim=(1, 2, 3))
+        # print(self.lvlb_weights[t], '????')
         loss_vlb = (self.lvlb_weights[t] * loss_vlb).mean()
         loss_dict.update({f'{prefix}/loss_vlb': loss_vlb})
         loss += (self.original_elbo_weight * loss_vlb)
@@ -1492,7 +1379,7 @@ class LatentDiffusion(DDPM):
 
     def configure_optimizers(self):
         lr = self.learning_rate
-        params = list(self.model.parameters())
+        params = list(self.model.parameters()) + list(self.model2.parameters())
         if self.cond_stage_trainable:
             print(f"{self.__class__.__name__}: Also optimizing conditioner params!")
             params = params + list(self.cond_stage_model.parameters())
