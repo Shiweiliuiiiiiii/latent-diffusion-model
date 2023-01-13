@@ -546,8 +546,7 @@ class LatentDiffusion(DDPM):
                 # reload weights before update
                 for name, tensor in self.model.named_parameters():
                     if name in self.mask.masks:
-                        print(self.mask.masks[name])
-                        tensor.data.copy_(tensor.data + (1-self.mask.masks[name]).to(tensor.device) * self.saved_params[name].data)
+                        tensor.data.copy_(tensor.data + (~self.mask.masks[name]).to(tensor.device) * self.saved_params[name].data)
 
         return loss
 
